@@ -4,6 +4,7 @@ import {
   PublicKey,
   Transaction,
   SystemProgram,
+  ComputeBudgetProgram,
 } from "@solana/web3.js";
 import bs58 from "bs58";
 import {
@@ -186,6 +187,12 @@ export function createDevnetTransport(
       throw Error("Wallet account changed. Reconnect before continuing.");
     const block = await connection.getLatestBlockhash();
     const tx = new Transaction({ feePayer: signer.publicKey, ...block }).add(
+      ...(walletApproval
+        ? [
+            ComputeBudgetProgram.setComputeUnitLimit({ units: 400000 }),
+            ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 0 }),
+          ]
+        : []),
       ...instructions,
     );
     let raw;
