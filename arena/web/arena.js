@@ -1,6 +1,8 @@
 const $ = (id) => document.getElementById(id),
   canvas = $("arena"),
   ctx = canvas.getContext("2d");
+const chainMode = location.pathname === "/chain";
+let transport = null;
 let latest = null,
   seat = -1,
   selected = false,
@@ -41,6 +43,12 @@ const errors = {
 };
 async function post(url, body = {}) {
   const started = performance.now();
+  if (transport) {
+    const result = await transport.post(url, body);
+    $("latency").textContent =
+      `Signed action ${Math.round(performance.now() - started)} ms`;
+    return result;
+  }
   const r = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -54,15 +62,33 @@ async function post(url, body = {}) {
   return result;
 }
 function update(data) {
+  if (chainMode && Number.isInteger(data.seat)) seat = data.seat;
   const before = latest;
   latest = data;
   const d = data.state;
   if (!d) return;
+  if (chainMode) {
+    $("settlement-status").hidden = false;
+    $("settlement-status").textContent =
+      data.settlement === "settled"
+        ? "Result settled on the local Solana chain."
+        : d.phase === 2
+          ? "Match finished. Verifying base-chain settlement…"
+          : "Signed actions execute on the local MagicBlock runtime.";
+    if (sessionStorage.getItem(`aochain:result-dismissed:${data.generation}`))
+      finishedGeneration = data.generation;
+  }
   if (before?.generation !== data.generation) {
     casting = false;
     selected = false;
     $("result").close();
-    log("New local duel. Both players must ready up.");
+    log(
+      chainMode
+        ? d.phase === 0
+          ? "On-chain duel ready. Both players must ready up."
+          : "Restored the authoritative match state."
+        : "New local duel. Both players must ready up.",
+    );
   }
   if (before?.state && before.generation === data.generation) {
     d.fighters.forEach((f, i) => {
@@ -71,7 +97,10 @@ function update(data) {
         log(`Player ${i + 1} took ${previous.hp - f.hp} damage.`);
     });
   }
-  const remaining = Math.max(0, Math.ceil((d.starts_at - data.tick) * 0.05));
+  const remaining = Math.max(
+    0,
+    Math.ceil(((d.starts_at - data.tick) * (data.tickMs || 50)) / 1000),
+  );
   $("status").textContent = data.failed
     ? "Rules engine unavailable"
     : d.phase === 2
@@ -85,7 +114,7 @@ function update(data) {
           : "Duel in progress";
   $("ready").disabled = seat < 0 || d.phase !== 0 || d.ready[seat];
   $("forfeit").disabled = seat < 0 || d.phase === 2;
-  $("rematch").hidden = seat < 0 || d.phase !== 2;
+  $("rematch").hidden = chainMode || seat < 0 || d.phase !== 2;
   $("rematch").disabled = data.rematchVotes.includes(seat);
   $("join").hidden = seat >= 0;
   $("player").textContent = seat < 0 ? "Spectator" : `Player ${seat + 1}`;
@@ -162,6 +191,11 @@ $("cast").onclick = () => {
   canvas.focus();
 };
 $("result-close").onclick = () => {
+  if (chainMode && latest)
+    sessionStorage.setItem(
+      `aochain:result-dismissed:${latest.generation}`,
+      "1",
+    );
   $("result").close();
   canvas.focus();
 };
@@ -278,17 +312,30 @@ function frame(now) {
   }
   requestAnimationFrame(frame);
 }
-update(
-  await fetch("/api/state")
-    .then((r) => r.json())
-    .then((d) => {
-      seat = d.seat;
-      return d;
-    }),
-);
-const stream = new EventSource("/api/events");
-stream.onmessage = (e) => update(JSON.parse(e.data));
-stream.onerror = () => {
-  $("status").textContent = "Reconnecting to the local arena…";
-};
+if (chainMode) {
+  document.querySelector(".build").textContent =
+    "LOCAL MAGICBLOCK · TEST IDENTITIES";
+  document.querySelector("footer span:last-child").textContent =
+    "MagicBlock-authoritative · measured local slot timing";
+  $("join").textContent = "Join local on-chain duel →";
+  $("latency").textContent = "Local MagicBlock";
+  $("events").textContent =
+    "Uses disposable local identities. Open a different browser session for player two. No real wallet or funds.";
+  transport = (await import("/chain.bundle.js")).createTransport(update, log);
+  update(transport.start());
+} else {
+  update(
+    await fetch("/api/state")
+      .then((r) => r.json())
+      .then((d) => {
+        seat = d.seat;
+        return d;
+      }),
+  );
+  const stream = new EventSource("/api/events");
+  stream.onmessage = (e) => update(JSON.parse(e.data));
+  stream.onerror = () => {
+    $("status").textContent = "Reconnecting to the local arena…";
+  };
+}
 requestAnimationFrame(frame);

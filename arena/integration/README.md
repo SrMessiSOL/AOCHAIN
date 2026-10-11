@@ -40,6 +40,14 @@ The script creates a match, rejects an unrelated opponent, accepts the named opp
 
 The client account order and PDA tags were checked against the pinned Rust SDK macros. Decoder tests use a synthetic Borsh fixture; actual account decoding is also exercised by the validator test. Session expiration by elapsed wall-clock time, rollup outages during commit, replay across production character identities, and browser wallet approvals are not covered yet. The reconnect check recreates the RPC connection; it does not simulate a process crash or restore session secrets.
 
-The browser still uses the local Rust harness. Next: browser account subscriptions, ephemeral session signing, measured slot cadence, pending transaction reconciliation and two-browser gameplay through the rollup. No gold, ranked points, character ownership or payouts are enabled.
+The chain browser entry point now implements account subscriptions, local ephemeral session signing and measured slot cadence. Two browsers exercised readiness, movement, targeted spells, reload recovery, forfeit and base-chain settlement. Interrupted commit recovery and real wallet integration remain pending. No gold, ranked points, character ownership or payouts are enabled.
 
 Official reference: [MagicBlock local development](https://docs.magicblock.gg/pages/ephemeral-rollups-ers/how-to-guide/local-development).
+
+## Play the browser chain lab
+
+With both local validators running, run `npm run build:browser` and `npm run start:browser` from this directory. Open http://127.0.0.1:3203/chain in two independent browser sessions. Join and ready each player. WASD/arrows move; Space attacks; select Arcane bolt, choose Cast, then click the opponent.
+
+The browser generates disposable local owner/session keys and retains them in tab sessionStorage for reload recovery. Closing the tab can lose them. Never import real keys or funds. The loopback HTTP coordinator receives public keys only and cannot sign transactions. A random seat capability is retained in tab sessionStorage as a fallback when the browser does not retain the HttpOnly cookie; both paths bind the seat to its original public keys. Its seat assignment is a local test convenience, not production authentication or matchmaking. Restart the coordinator for a fresh pairing; rematches are not integrated.
+
+Finished matches reconcile restored base-chain ownership and matching result. Dismissed result modals are retained per pairing. Action timings and estimated slot cadence are local observations, not global performance guarantees. Real wallet approval, interrupted commit recovery, session expiry recovery and production character isolation remain release gates.

@@ -10,8 +10,8 @@
 
 ## Not verified / next gates
 
-- Local validator lifecycle transactions, delegation and base-chain settlement now pass; see the lifecycle evidence below. Browser subscriptions are not yet implemented.
-- The browser still connects to the local Rust harness, not MagicBlock. There is no wallet connection in this lab.
+- Local validator lifecycle transactions, delegation and base-chain settlement now pass; see the lifecycle evidence below. Browser subscriptions and local session signing are now implemented.
+- The chain browser lab connects to local MagicBlock; the Rust lab remains separate. There is no real wallet connection in either lab.
 - No devnet/mainnet deployment, real signatures, funding, gold, rating, asset ownership or payouts were exercised.
 - Scoped session authorization and revocation pass with locally generated signers. Real browser wallet approvals and wall-clock session expiry remain untested. Slot-based cooldown timing must be calibrated against the selected runtime.
 - Tested instruction boundaries, signer enforcement and delegation/settlement CPI pass locally; production character isolation and adverse recovery paths still need coverage.
@@ -30,3 +30,11 @@ The official validator package is pinned to 0.14.10; Solana test validator is 4.
 The actual program passed create → join → delegate → session readiness/movement/spell → forfeit → commit/undelegate. Rejected unrelated participant, premature settlement, unauthorized action, nonce replay, revoked session and post-finish action all preserved arena bytes. Fresh RPC connection recovered nonce 3. The base-chain check requires arena program ownership and matching final result, not just a settlement-request flag. Test wallets were generated in memory and only local test SOL was used. Public local receipts are saved under ignored `arena/work/`; these are not devnet transactions.
 
 The inherited API/frontend/server were not rebuilt or claimed production-ready. This validation applies only to the isolated `arena/` prototype.
+
+## Browser chain integration
+
+Two independent browsers exercised create/join/delegate, signed readiness, keyboard movement, a targeted spell (26 damage and 20 mana), reload recovery, forfeit and base-chain settlement. Both clients reported the committed result. Local signed-action samples were 92 ms movement, 110 ms spell and 192 ms forfeit; these single samples are not regional performance claims.
+
+Final recovery changes load committed base-chain state after undelegation, align the countdown with the last authoritative tick, and retain result dismissal per pairing. Four JavaScript tests cover decoder/settlement/account-order boundaries and actual HTTP coordinator origin, body-size, identity binding and seat limits. Generated bundles and local key material remain excluded from Git. No real wallet or public-chain test is implied.
+
+A fresh browser run also reproduced missing cookie retention in the in-app browser. A tab-scoped random resume capability fixed polling and reload registration; HTTP tests reject forged capabilities and identity changes. Both browsers subsequently recovered their seats, readied and entered the authoritative match. Browser automation then timed out on the native forfeit confirmation, so the final post-settlement reload/modal-dismissal changes are implemented but have not received a fresh end-to-end UI verification. The earlier completed two-browser settlement test remains separate evidence.

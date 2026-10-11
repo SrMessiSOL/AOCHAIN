@@ -1,4 +1,5 @@
-import { createHash } from "node:crypto";
+import { sha256 } from "@noble/hashes/sha256";
+import { Buffer } from "buffer";
 import {
   PublicKey,
   SystemProgram,
@@ -21,7 +22,9 @@ export const CONTEXT = new PublicKey(
   "MagicContext1111111111111111111111111111111",
 );
 export const discriminator = (namespace, name) =>
-  createHash("sha256").update(`${namespace}:${name}`).digest().subarray(0, 8);
+  Buffer.from(
+    sha256(new TextEncoder().encode(`${namespace}:${name}`)),
+  ).subarray(0, 8);
 export function u64(value) {
   const data = Buffer.alloc(8);
   data.writeBigUInt64LE(BigInt(value));
