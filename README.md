@@ -1,115 +1,28 @@
-# AOWeb
+# AOCHAIN
 
-Proyecto creado por Damián Catanzaro.
+A browser-first Argentum Online PvP arena project exploring regional on-chain matches with MagicBlock on Solana.
 
-X: [@DamianCatanzaro](https://x.com/DamianCatanzaro)
+## Current status
 
-## Requisitos
+This repository starts from upstream [AOWeb](https://github.com/dcatanzaro/aoweb), commit `f55f02635e008ed0e831742d28be5385f0583bd3`. The original game code and Git history are preserved. MagicBlock integration, ranked matchmaking and the PvP conversion are planned, not implemented or deployed.
 
-- Node.js 22 o superior
-- pnpm
-- Docker, recomendado para PostgreSQL
-- psql, opcional si preferis restaurar el dump desde el host
+This is a separate project from [ArgentumOnchain](https://github.com/SrMessiSOL/ArgentumOnchain). Its running server, database, website and deployment are unchanged. This fresh upstream copy does not yet include that project's English localization, security fixes or wallet features.
 
-## 1. Levantar La Base De Datos
+## Target experience
 
-El dump inicial del juego esta en `database/aoweb.sql`.
+- Maximum-level characters with balanced class/loadout presets.
+- A regional town lobby, practice duels and ranked 1v1 arenas.
+- Regional matchmaking by latency and rating.
+- Restricted session authorization for gameplay without a wallet prompt for every action.
+- Match rules executed in Solana programs on MagicBlock Ephemeral Rollups, with results settled back to Solana.
+- Gold and equipment progression to be designed alongside competitive balance and abuse prevention.
 
-Desde la carpeta padre del proyecto:
+See [the implementation plan](docs/PVP-IMPLEMENTATION-PLAN.md). No performance, trustlessness or production-readiness claims are made for this initial repository.
 
-```bash
-docker run --name aoweb-postgres \
-  -e POSTGRES_DB=aoweb \
-  -e POSTGRES_USER=postgres \
-  -e POSTGRES_PASSWORD=postgres \
-  -p 127.0.0.1:5432:5432 \
-  -d postgres:18-alpine
-```
+## Upstream and licensing
 
-Restaurar la base:
+AOWeb was created by Damián Catanzaro: [GitHub](https://github.com/dcatanzaro/aoweb), [X](https://x.com/DamianCatanzaro).
 
-```bash
-docker exec -i aoweb-postgres psql -U postgres -d aoweb < database/aoweb.sql
-```
+No LICENSE file was found in this upstream snapshot. Public availability does not establish unrestricted redistribution or commercial rights. Code and game artwork licensing must be clarified before a public product release. Original files and author attribution are retained; no new license is imposed over upstream material.
 
-La URL local para la API queda:
-
-```bash
-DATABASE_URL=postgresql://postgres:postgres@localhost:5432/aoweb
-```
-
-## 2. Levantar La API
-
-Crear `api/.env` tomando como base `api/.env.example`:
-
-```bash
-PORT=3001
-DATABASE_URL=postgresql://postgres:postgres@localhost:5432/aoweb
-TOKEN_AUTH=changeme
-CORS_ORIGIN=http://localhost:3000
-```
-
-Instalar dependencias y levantar en desarrollo:
-
-```bash
-cd api
-pnpm install
-pnpm dev
-```
-
-La API queda en `http://localhost:3001`.
-
-## 3. Levantar El Server Del Juego
-
-En otra terminal, crear `server/.env` tomando como base `server/.env.example`:
-
-```bash
-NODE_ENV=development
-AOWEB_TEST_MODE=false
-INITIAL_ONLINE_RECORD=0
-PORT=7666
-API_BASE_URL=http://127.0.0.1:3001
-RESET_CONNECTED_CHARACTERS_ON_STARTUP=false
-TOKEN_AUTH=changeme
-```
-
-Instalar dependencias y levantar:
-
-```bash
-cd server
-pnpm install
-pnpm dev
-```
-
-El server WebSocket queda en `ws://localhost:7666`.
-
-## 4. Levantar El Frontend
-
-En otra terminal, crear `frontend/.env.local` tomando como base `frontend/.env.example`:
-
-```bash
-NEXT_PUBLIC_API_BASE_URL=http://localhost:3001
-API_BASE_URL=http://localhost:3001
-TOKEN_AUTH=changeme
-NEXT_PUBLIC_WS_URL=ws://localhost:7666
-```
-
-Instalar dependencias y levantar:
-
-```bash
-cd frontend
-pnpm install
-pnpm dev
-```
-
-Abrir `http://localhost:3000`.
-
-## Capturas
-
-![Captura 1](screenshots/1.jpg)
-
-![Captura 2](screenshots/2.jpg)
-
-![Captura 3](screenshots/3.jpg)
-
-![Captura 4](screenshots/4.jpg)
+The [original setup guide](docs/UPSTREAM-README.md) is preserved for reference. It describes the existing off-chain game, not the planned MagicBlock arena. Use isolated local services and test accounts only; do not import live player data or custody keys.
