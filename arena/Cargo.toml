@@ -1,0 +1,9 @@
+[workspace]
+members = ["core", "runner", "programs/aochain-arena"]
+default-members = ["core", "runner"]
+resolver = "2"
+
+[profile.release]
+overflow-checks = true
+lto = "fat"
+codegen-units = 1

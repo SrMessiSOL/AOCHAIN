@@ -21,3 +21,7 @@ playwright-report/
 *.cer
 *.jks
 *.keystore
+target/
+rustc-ice-*.txt
+arena/work/
+arena/*.log

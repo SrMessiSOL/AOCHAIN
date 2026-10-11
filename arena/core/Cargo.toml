@@ -1,0 +1,12 @@
+[package]
+name = "aochain-arena-core"
+version = "0.1.0"
+edition = "2021"
+
+[features]
+serde = ["dep:serde"]
+anchor = ["dep:anchor-lang"]
+
+[dependencies]
+serde = { version = "1", features = ["derive"], optional = true }
+anchor-lang = { version = "=1.0.2", optional = true }

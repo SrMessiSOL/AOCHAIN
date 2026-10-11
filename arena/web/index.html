@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>AOCHAIN · Arena lab</title>
+    <link rel="stylesheet" href="/arena.css" />
+  </head>
+  <body>
+    <header>
+      <a class="brand" href="/">◈ AOCHAIN<span>ARGENTUM ARENA</span></a
+      ><span class="build">LOCAL RULES LAB · NO ON-CHAIN MATCH</span>
+    </header>
+    <main>
+      <section class="intro">
+        <div>
+          <p class="eyebrow">TWO PLAYERS. ONE ARENA.</p>
+          <h1>Enter the duel.</h1>
+          <p>Fixed loadouts. Skill decides the winner.</p>
+        </div>
+        <button id="join" class="primary">Join arena →</button>
+      </section>
+      <section class="arena-layout">
+        <aside>
+          <p class="eyebrow">MATCH CONSOLE</p>
+          <div id="events" role="log" aria-live="polite">
+            <p>
+              Join, then ready up. Open this URL in another browser or private
+              window for player two.
+            </p>
+          </div>
+        </aside>
+        <div class="battle">
+          <div class="battle-top">
+            <strong id="status">Waiting for players</strong
+            ><span id="latency">Local harness</span>
+          </div>
+          <canvas
+            id="arena"
+            width="768"
+            height="576"
+            aria-label="Arena. Move with WASD or arrows, attack with Space. Select Arcane bolt, choose Cast, then click the opponent."
+            tabindex="0"
+          ></canvas>
+          <div class="battle-actions">
+            <button id="ready" disabled>Ready up</button
+            ><button id="forfeit" disabled>Forfeit</button
+            ><button id="rematch" hidden>Request rematch</button>
+          </div>
+        </div>
+        <aside class="loadout">
+          <p class="eyebrow">YOUR FIGHTER</p>
+          <h2 id="player">Spectator</h2>
+          <p>Maximum-level test preset</p>
+          <label>Health <strong id="hp">120 / 120</strong></label
+          ><progress id="health" max="120" value="120"></progress
+          ><label>Mana <strong id="mp">100 / 100</strong></label
+          ><progress id="mana" max="100" value="100"></progress>
+          <p class="eyebrow inventory-label">EQUIPMENT</p>
+          <div class="equipment">
+            <div>⚔<span>Arena sword</span><small>18 damage · Space</small></div>
+            <div>
+              ♜<span>Balanced armor</span><small>Fixed ranked preset</small>
+            </div>
+          </div>
+          <p class="eyebrow inventory-label">SPELLS</p>
+          <button id="spell" aria-pressed="false">
+            ✦ Arcane bolt <small>26 damage · 20 mana</small></button
+          ><button id="cast" disabled>Cast selected spell</button>
+          <p id="cast-help">Select a spell, then Cast, then the opponent.</p>
+        </aside>
+      </section>
+      <footer>
+        <span><kbd>W A S D</kbd> / arrows Move</span
+        ><span><kbd>Space</kbd> Melee</span
+        ><span><kbd>Esc</kbd> Cancel casting</span
+        ><span>Rust-authoritative test · 50 ms local simulation ticks</span>
+      </footer>
+    </main>
+    <dialog id="result">
+      <p class="eyebrow">MATCH COMPLETE</p>
+      <h2 id="result-title"></h2>
+      <p>No gold or rating is awarded in this local prototype.</p>
+      <button id="result-close">Return to arena</button>
+    </dialog>
+    <script type="module" src="/arena.js"></script>
+  </body>
+</html>
