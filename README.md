@@ -4,7 +4,7 @@ A browser-first Argentum Online PvP arena project exploring regional on-chain ma
 
 ## Current status
 
-This repository starts from upstream [AOWeb](https://github.com/dcatanzaro/aoweb), commit `f55f02635e008ed0e831742d28be5385f0583bd3`. The original game code and Git history are preserved. An isolated [arena prototype](arena/README.md) now includes a deterministic Rust combat core, a two-player local browser lab using upstream character sprites, and a Solana program with MagicBlock delegation/settlement hooks. It has not been deployed or verified through a complete rollup match. Ranked matchmaking and the full PvP conversion remain planned.
+This repository starts from upstream [AOWeb](https://github.com/dcatanzaro/aoweb), commit `f55f02635e008ed0e831742d28be5385f0583bd3`. The original game code and Git history are preserved. An isolated [arena prototype](arena/README.md) includes a deterministic Rust combat core, a two-player local browser lab using upstream character sprites, and a Solana program with MagicBlock delegation/settlement. The actual program now passes a [local validator lifecycle test](arena/integration/README.md), including session combat and settlement back to the local base chain. The browser still uses the Rust rules lab. Browser wallet integration, public deployment, ranked matchmaking and the full PvP conversion remain pending.
 
 This is a separate project from [ArgentumOnchain](https://github.com/SrMessiSOL/ArgentumOnchain). Its running server, database, website and deployment are unchanged. This fresh upstream copy does not yet include that project's English localization, security fixes or wallet features.
 

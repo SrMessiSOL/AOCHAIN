@@ -1,0 +1,12 @@
+{
+  "name": "aochain-local-chain-tests",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test client.test.mjs",
+    "test:local": "node lifecycle.mjs"
+  },
+  "dependencies": {
+    "@solana/web3.js": "1.98.4"
+  }
+}

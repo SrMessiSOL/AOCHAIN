@@ -10,17 +10,23 @@
 
 ## Not verified / next gates
 
-- No validator lifecycle transaction, delegation acknowledgement, account subscription, on-chain match or base-chain settlement was executed.
+- Local validator lifecycle transactions, delegation and base-chain settlement now pass; see the lifecycle evidence below. Browser subscriptions are not yet implemented.
 - The browser still connects to the local Rust harness, not MagicBlock. There is no wallet connection in this lab.
 - No devnet/mainnet deployment, real signatures, funding, gold, rating, asset ownership or payouts were exercised.
-- Scoped session authorization is implemented in the program but has not been tested through a real wallet/session lifecycle. Slot-based cooldown timing must be calibrated against the selected runtime.
-- Program instruction boundaries, signer enforcement and CPI behavior require validator-level tests; native helper tests and compilation do not prove them.
+- Scoped session authorization and revocation pass with locally generated signers. Real browser wallet approvals and wall-clock session expiry remain untested. Slot-based cooldown timing must be calibrated against the selected runtime.
+- Tested instruction boundaries, signer enforcement and delegation/settlement CPI pass locally; production character isolation and adverse recovery paths still need coverage.
 - Disconnection recovery, pending commit reconciliation, matchmaking, prediction/interpolation, global latency and ranked balance remain unfinished.
 
 ## Build notes
 
 Use the stable compiler for native program checks. The installed nightly compiler crashed during macro expansion. A Windows-mounted Linux build output stalled in a dependency build script; Linux-native build storage resolved it. Program dependencies follow the official example's pinned Anchor 1.0.2 / ephemeral-rollups-sdk 0.16.2 pairing. Generated binaries, build logs and the unfunded local identity key are excluded from Git.
 
-The initial SBF build succeeded and produced a 321,072-byte executable. A final incremental rebuild after formatting could not start because WSL returned `Wsl/Service/E_UNEXPECTED` twice. Re-run the final SBF build once WSL is healthy before deploying; the successful native tests are separate evidence. No WSL shutdown/restart was attempted because it could interrupt unrelated work.
+The initial SBF build succeeded and produced a 321,072-byte executable. WSL failures originally blocked the final rebuild. WSL subsequently recovered, and the final incremental SBF build passed. Its SHA256 is `b9d9a8ff89a579c142f8542b148b4b8d0515b40cbd2baf939893eee8fe6b48f1`. No WSL shutdown or system library upgrade was performed.
+
+## Local lifecycle evidence
+
+The official validator package is pinned to 0.14.10; Solana test validator is 4.2.2. Ubuntu 22.04 could not load the validator's newer glibc/libstdc++ requirements. Verified Ubuntu archive packages were extracted into a private cache and used through their private dynamic loader; no system libraries were replaced. Empty package files from the low-space installation were replaced by a fresh isolated installation. A failed generated Windows-mounted build cache was removed to free space; live game files and keys were preserved.
+
+The actual program passed create → join → delegate → session readiness/movement/spell → forfeit → commit/undelegate. Rejected unrelated participant, premature settlement, unauthorized action, nonce replay, revoked session and post-finish action all preserved arena bytes. Fresh RPC connection recovered nonce 3. The base-chain check requires arena program ownership and matching final result, not just a settlement-request flag. Test wallets were generated in memory and only local test SOL was used. Public local receipts are saved under ignored `arena/work/`; these are not devnet transactions.
 
 The inherited API/frontend/server were not rebuilt or claimed production-ready. This validation applies only to the isolated `arena/` prototype.

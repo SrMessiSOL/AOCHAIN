@@ -44,6 +44,6 @@ cargo build-sbf --manifest-path arena/programs/aochain-arena/Cargo.toml --sbf-ou
 
 Use a supported Linux Solana toolchain (WSL on Windows) for SBF. The local browser lab runs natively on Windows. Keep Linux compilation outputs on a Linux filesystem to avoid Windows-mounted filesystem build stalls.
 
-The on-chain program still needs a full local-validator/MagicBlock lifecycle test and a real two-client devnet match. A passing native Rust test or SBF build is not evidence of delegation, latency, wallet signatures or completed settlement.
+The local-validator/MagicBlock lifecycle test now passes using generated throwaway signers. See `integration/README.md`. Browser wallet/session integration and a real two-client devnet match remain pending. Local validator evidence does not establish production latency or real wallet behavior.
 
 Official integration references: [MagicBlock quickstart](https://docs.magicblock.gg/pages/ephemeral-rollups-ers/how-to-guide/quickstart), [local stack](https://docs.magicblock.gg/pages/ephemeral-rollups-ers/how-to-guide/local-development), [official examples](https://github.com/magicblock-labs/magicblock-engine-examples/tree/main/counter/anchor).
