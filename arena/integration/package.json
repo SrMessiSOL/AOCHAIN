@@ -3,14 +3,16 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node --test client.test.mjs pairing.test.mjs",
+    "test": "node --test client.test.mjs pairing.test.mjs devnet-wallet.test.mjs",
     "build:browser": "node build-browser.mjs",
     "start:browser": "node serve-browser.mjs",
+    "check:devnet": "node devnet-preflight.mjs",
     "test:local": "node lifecycle.mjs"
   },
   "dependencies": {
     "@noble/hashes": "1.8.0",
     "@solana/web3.js": "1.98.4",
+    "@wallet-standard/app": "1.1.0",
     "buffer": "6.0.3",
     "esbuild": "0.25.12"
   }

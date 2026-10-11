@@ -170,7 +170,16 @@ $("join").onclick = async () => {
 };
 $("ready").onclick = () => action("ready");
 $("forfeit").onclick = () => {
-  if (confirm("Forfeit this test duel?")) action("forfeit");
+  held = null;
+  $("forfeit-dialog").showModal();
+};
+$("forfeit-cancel").onclick = () => {
+  $("forfeit-dialog").close();
+  canvas.focus();
+};
+$("forfeit-confirm").onclick = () => {
+  $("forfeit-dialog").close();
+  action("forfeit");
 };
 $("rematch").onclick = async () => {
   try {
@@ -210,7 +219,10 @@ const headings = {
   ArrowLeft: 4,
 };
 window.addEventListener("keydown", (e) => {
-  if ($("result").open || ["INPUT", "TEXTAREA"].includes(e.target.tagName))
+  if (
+    document.querySelector("dialog[open]") ||
+    ["INPUT", "TEXTAREA"].includes(e.target.tagName)
+  )
     return;
   if (headings[e.key]) {
     e.preventDefault();
@@ -301,6 +313,7 @@ function frame(now) {
     });
     if (
       held &&
+      !document.querySelector("dialog[open]") &&
       now - lastMove >= 200 &&
       latest.state.phase === 1 &&
       latest.tick >= latest.state.starts_at &&
@@ -312,7 +325,9 @@ function frame(now) {
   }
   requestAnimationFrame(frame);
 }
-if (chainMode) {
+if (location.pathname === "/devnet") {
+  (await import("/devnet-wallet.bundle.js")).startDevnetSetup();
+} else if (chainMode) {
   document.querySelector(".build").textContent =
     "LOCAL MAGICBLOCK · TEST IDENTITIES";
   document.querySelector("footer span:last-child").textContent =

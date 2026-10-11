@@ -11,3 +11,13 @@ await build({
   inject: [here + "browser-globals.mjs"],
   define: { "process.env.NODE_ENV": '"production"' },
 });
+await build({
+  entryPoints: [here + "devnet-wallet.mjs"],
+  outfile: here + "../work/devnet-wallet.bundle.js",
+  bundle: true,
+  format: "esm",
+  platform: "browser",
+  target: "es2022",
+  inject: [here + "browser-globals.mjs"],
+  define: { "process.env.NODE_ENV": '"production"' },
+});

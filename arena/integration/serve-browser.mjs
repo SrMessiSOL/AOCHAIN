@@ -18,6 +18,11 @@ const json = (res, status, data) => {
 };
 const files = {
   "/chain": ["../web/index.html", "text/html"],
+  "/devnet": ["../web/index.html", "text/html"],
+  "/devnet-wallet.bundle.js": [
+    "../work/devnet-wallet.bundle.js",
+    "text/javascript",
+  ],
   "/arena.js": ["../web/arena.js", "text/javascript"],
   "/arena.css": ["../web/arena.css", "text/css"],
   "/sprites.json": ["../web/sprites.json", "application/json"],
@@ -30,7 +35,7 @@ const server = http.createServer(async (req, res) => {
     res.setHeader("X-Content-Type-Options", "nosniff");
     res.setHeader(
       "Content-Security-Policy",
-      "default-src 'self'; connect-src 'self' http://127.0.0.1:8899 http://127.0.0.1:7799 ws://127.0.0.1:8900 ws://127.0.0.1:7800; frame-ancestors 'none'",
+      "default-src 'self'; connect-src 'self' https://api.devnet.solana.com http://127.0.0.1:8899 http://127.0.0.1:7799 ws://127.0.0.1:8900 ws://127.0.0.1:7800; frame-ancestors 'none'",
     );
     const url = new URL(req.url, origin);
     if (req.method === "POST" && url.pathname === "/api/pair") {

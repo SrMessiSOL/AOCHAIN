@@ -10,6 +10,7 @@
     <header>
       <a class="brand" href="/">◈ AOCHAIN<span>ARGENTUM ARENA</span></a
       ><span class="build">LOCAL RULES LAB · NO ON-CHAIN MATCH</span>
+      <button id="wallet-button" hidden>Connect wallet</button>
     </header>
     <main>
       <section class="intro">
@@ -84,6 +85,24 @@
       <p id="settlement-status" hidden></p>
       <button id="result-close">Return to arena</button>
     </dialog>
+    <dialog id="forfeit-dialog" aria-labelledby="forfeit-title">
+      <p class="eyebrow">LEAVE THIS MATCH</p>
+      <h2 id="forfeit-title">Forfeit the duel?</h2>
+      <p>Your opponent wins this test match. No gold or rating is affected.</p>
+      <button id="forfeit-cancel" autofocus>Keep playing</button>
+      <button id="forfeit-confirm">Forfeit match</button>
+    </dialog>
     <script type="module" src="/arena.js"></script>
+    <dialog id="wallet-dialog" aria-labelledby="wallet-title">
+      <p class="eyebrow">SOLANA DEVNET</p>
+      <h2 id="wallet-title">Connect your wallet</h2>
+      <p>
+        Choose your installed wallet. Connecting does not authorize
+        transactions.
+      </p>
+      <div id="wallet-list"></div>
+      <p id="wallet-status" role="status" aria-live="polite"></p>
+      <button id="wallet-close">Close</button>
+    </dialog>
   </body>
 </html>

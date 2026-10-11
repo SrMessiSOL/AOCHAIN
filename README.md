@@ -10,6 +10,8 @@ This is a separate project from [ArgentumOnchain](https://github.com/SrMessiSOL/
 
 ## Target experience
 
+The arena program is now deployed on Solana devnet. A scripted two-participant match exercised MagicBlock US delegation, session readiness, movement, spell combat, forfeit and verified settlement back to Solana devnet. An interrupted match was also recovered by timeout and settled. Browser gameplay remains local; `/devnet` provides Wallet Standard connection and readiness preparation, with wallet-backed browser matches still pending. See [the devnet milestone](docs/DEVNET-MILESTONE.md).
+
 - Maximum-level characters with balanced class/loadout presets.
 - A regional town lobby, practice duels and ranked 1v1 arenas.
 - Regional matchmaking by latency and rating.

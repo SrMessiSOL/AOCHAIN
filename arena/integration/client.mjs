@@ -51,7 +51,7 @@ const instruction = (name, keys, ...args) =>
     keys,
     data: Buffer.concat([discriminator("global", name), ...args]),
   });
-export function create(owner, opponent, session, id) {
+export function create(owner, opponent, session, id, validator = VALIDATOR) {
   return instruction(
     "create",
     [
@@ -62,7 +62,7 @@ export function create(owner, opponent, session, id) {
     u64(id),
     opponent.toBuffer(),
     session.toBuffer(),
-    VALIDATOR.toBuffer(),
+    validator.toBuffer(),
   );
 }
 export const join = (opponent, arena, session) =>
