@@ -36,8 +36,10 @@ Use `node arena/integration/devnet-smoke.mjs` only for an explicit new test. `--
 
 1. Deployment, binary verification and scripted devnet combat/settlement are complete. Preserve the upgrade key outside browser code.
 2. US validator identity/endpoints were checked against the official quickstart: `MUS3hc9TCw4cGC12vHNoYcCGzJG1txjgQLZWVoeNHNd`, `https://devnet-us.magicblock.app`.
-3. Add wallet-signed match creation/join and scoped session funding/authorization, with explicit user actions rather than automatic wallet prompts from polling.
-4. Route session actions to the selected ER and verify final base-chain ownership/result after commit.
+3. Browser wallet-signed creation/join, scoped session funding and delegation are implemented behind explicit approval buttons. Polling never requests wallet signatures. Each tab uses its own pairing capability rather than shared cookies.
+4. Browser session actions route to the US ER; settlement checks restored base-chain ownership and the matching result. The scoped session key stays in tab storage; the wallet private key is never read. This storage policy and the loopback pairing coordinator are test infrastructure, not production custody or matchmaking.
 5. Complete two real-wallet matches, reconnect, account-change, expiry, revocation and interrupted settlement checks. Measure regional latency before enabling community matches.
 
 No rewards, rating or asset transfers are enabled. Unit tests with mock Wallet Standard accounts establish capability and network filtering, not real wallet approval or devnet match execution.
+
+The browser journals the signed transaction signature before broadcasting and checks its status before allowing another operation. It rejects changed wallet accounts and altered transaction messages, and checks test SOL for fees, session funding and match rent before prompting. Nine JavaScript tests pass; real browser approval, outage recovery, revocation and expiry still require end-to-end proof.

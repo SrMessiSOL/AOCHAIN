@@ -1,7 +1,8 @@
 const $ = (id) => document.getElementById(id),
   canvas = $("arena"),
   ctx = canvas.getContext("2d");
-const chainMode = location.pathname === "/chain";
+const devnetMode = location.pathname === "/devnet";
+const chainMode = location.pathname === "/chain" || devnetMode;
 let transport = null;
 let latest = null,
   seat = -1,
@@ -46,7 +47,7 @@ async function post(url, body = {}) {
   if (transport) {
     const result = await transport.post(url, body);
     $("latency").textContent =
-      `Signed action ${Math.round(performance.now() - started)} ms`;
+      `${url === "/api/join" ? "Pairing request" : "Signed action"} ${Math.round(performance.now() - started)} ms`;
     return result;
   }
   const r = await fetch(url, {
@@ -65,16 +66,24 @@ function update(data) {
   if (chainMode && Number.isInteger(data.seat)) seat = data.seat;
   const before = latest;
   latest = data;
+  if (chainMode && seat >= 0) {
+    $("join").hidden = true;
+    $("player").textContent = `Player ${seat + 1}`;
+  }
   const d = data.state;
   if (!d) return;
   if (chainMode) {
     $("settlement-status").hidden = false;
     $("settlement-status").textContent =
       data.settlement === "settled"
-        ? "Result settled on the local Solana chain."
+        ? devnetMode
+          ? "Result settled on Solana devnet."
+          : "Result settled on the local Solana chain."
         : d.phase === 2
           ? "Match finished. Verifying base-chain settlement…"
-          : "Signed actions execute on the local MagicBlock runtime.";
+          : devnetMode
+            ? "Signed actions execute on MagicBlock US devnet."
+            : "Signed actions execute on the local MagicBlock runtime.";
     if (sessionStorage.getItem(`aochain:result-dismissed:${data.generation}`))
       finishedGeneration = data.generation;
   }
@@ -326,7 +335,80 @@ function frame(now) {
   requestAnimationFrame(frame);
 }
 if (location.pathname === "/devnet") {
-  (await import("/devnet-wallet.bundle.js")).startDevnetSetup();
+  const { startDevnetSetup, createDevnetTransport } =
+    await import("/devnet-wallet.bundle.js");
+  const stages = {
+    waiting:
+      "Waiting for another wallet. Use a separate browser session and a different wallet.",
+    create:
+      "Create the duel and fund a scoped session with 0.01 devnet SOL, plus match rent and fees.",
+    join: "Join the duel and fund your scoped session with 0.01 devnet SOL, plus fees.",
+    delegate:
+      "Both players consented. Approve delegation to MagicBlock US devnet.",
+    "waiting-create": "Waiting for player one to create the duel.",
+    "waiting-join": "Waiting for player two to approve joining.",
+    "waiting-delegate": "Waiting for player one to approve delegation.",
+    pending: "Checking the existing transaction. No new signature is needed.",
+    active: "Match active on MagicBlock US devnet.",
+    finished: "Match finished. Verifying settlement on Solana devnet.",
+    error:
+      "Connection or operation needs attention. Read the match console; existing transactions are checked before retrying.",
+    "account-changed":
+      "Wallet account changed. Reconnect the original wallet to recover this match.",
+    "connection-lost":
+      "Connection interrupted. Gameplay state is being refreshed.",
+  };
+  startDevnetSetup(
+    (wallet, account) => {
+      transport?.stop?.();
+      transport = createDevnetTransport(
+        wallet,
+        account,
+        update,
+        log,
+        (step, data, waiting) => {
+          update(data);
+          if (!data.state) $("status").textContent = stages[step] || step;
+          $("match-setup-status").hidden = false;
+          $("match-setup-status").textContent = stages[step] || step;
+          $("authorize-match").hidden = ![
+            "create",
+            "join",
+            "delegate",
+          ].includes(step);
+          $("authorize-match").disabled = waiting;
+          $("authorize-match").textContent =
+            step === "delegate"
+              ? "Approve delegation"
+              : step === "create"
+                ? "Create & authorize session"
+                : "Join & authorize session";
+        },
+      );
+      update(transport.start());
+    },
+    () => {
+      transport?.stop?.();
+      seat = -1;
+      latest = null;
+      held = null;
+      $("cast").disabled = true;
+      $("authorize-match").hidden = true;
+      $("ready").disabled = true;
+      $("forfeit").disabled = true;
+    },
+  );
+  $("authorize-match").onclick = async () => {
+    const b = $("authorize-match");
+    b.disabled = true;
+    try {
+      await transport.authorize();
+    } catch (e) {
+      log(e.message);
+    } finally {
+      b.disabled = false;
+    }
+  };
 } else if (chainMode) {
   document.querySelector(".build").textContent =
     "LOCAL MAGICBLOCK · TEST IDENTITIES";

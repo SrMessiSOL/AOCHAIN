@@ -78,6 +78,17 @@ test("local pairing enforces origin, size, cookie seat and two-player bounds; ha
     assert.equal((await post(two, cookie)).status, 409);
     assert.equal((await (await post(two)).json()).seat, 1);
     assert.equal((await post(identity())).status, 409);
+    const isolated = await fetch(origin + "/api/pair/devnet", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Origin: origin },
+      body: JSON.stringify(one),
+    });
+    assert.match(isolated.headers.get("set-cookie"), /^aochain-devnet=/);
+    assert.equal(
+      (await isolated.json()).seat,
+      0,
+      "devnet pairing must not inherit occupied local seats",
+    );
     assert.equal(
       (await fetch(origin + "/api/action", { method: "POST" })).status,
       405,

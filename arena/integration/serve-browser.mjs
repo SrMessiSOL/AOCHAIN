@@ -7,8 +7,9 @@ const port = Number(process.env.PORT || 3203);
 if (!Number.isInteger(port) || port < 1024 || port > 65535)
   throw Error("Invalid local port");
 const origin = `http://127.0.0.1:${port}`;
-const players = [null, null],
+const globalPlayers = [null, null],
   id = Date.now();
+const devnetPlayers = [null, null];
 const json = (res, status, data) => {
   res.writeHead(status, {
     "Content-Type": "application/json",
@@ -35,10 +36,16 @@ const server = http.createServer(async (req, res) => {
     res.setHeader("X-Content-Type-Options", "nosniff");
     res.setHeader(
       "Content-Security-Policy",
-      "default-src 'self'; connect-src 'self' https://api.devnet.solana.com http://127.0.0.1:8899 http://127.0.0.1:7799 ws://127.0.0.1:8900 ws://127.0.0.1:7800; frame-ancestors 'none'",
+      "default-src 'self'; connect-src 'self' https://api.devnet.solana.com https://devnet-us.magicblock.app wss://devnet-us.magicblock.app http://127.0.0.1:8899 http://127.0.0.1:7799 ws://127.0.0.1:8900 ws://127.0.0.1:7800; frame-ancestors 'none'",
     );
     const url = new URL(req.url, origin);
-    if (req.method === "POST" && url.pathname === "/api/pair") {
+    if (
+      req.method === "POST" &&
+      ["/api/pair", "/api/pair/devnet"].includes(url.pathname)
+    ) {
+      const devnet = url.pathname.endsWith("/devnet");
+      const players = devnet ? devnetPlayers : globalPlayers;
+      const cookieName = devnet ? "aochain-devnet" : "aochain-chain";
       if (
         req.headers.origin !== origin ||
         req.headers["content-type"] !== "application/json"
@@ -59,9 +66,9 @@ const server = http.createServer(async (req, res) => {
         return json(res, 400, { error: "Invalid pairing" });
       new PublicKey(input.owner);
       new PublicKey(input.session);
-      const cookieValue = /(?:^|;\s*)aochain-chain=([a-f0-9]{64})(?:;|$)/.exec(
-        req.headers.cookie || "",
-      )?.[1];
+      const cookieValue = new RegExp(
+        `(?:^|;\\s*)${cookieName}=([a-f0-9]{64})(?:;|$)`,
+      ).exec(req.headers.cookie || "")?.[1];
       const resumeHeader = req.headers["x-aochain-seat"];
       const cookie =
         cookieValue ||
@@ -95,7 +102,7 @@ const server = http.createServer(async (req, res) => {
         });
       res.setHeader(
         "Set-Cookie",
-        `aochain-chain=${players[seat].cookie}; HttpOnly; SameSite=Strict; Path=/`,
+        `${cookieName}=${players[seat].cookie}; HttpOnly; SameSite=Strict; Path=/`,
       );
       return json(res, 200, {
         id,

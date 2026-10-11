@@ -1,6 +1,7 @@
 import { getWallets } from "@wallet-standard/app";
 import { Connection } from "@solana/web3.js";
 import { PROGRAM } from "./client.mjs";
+export { createDevnetTransport } from "./devnet-transport.mjs";
 
 export const DEVNET_GENESIS = "EtWTRABZaYq6iMfeYKouRu166VU2xqa1wcaWoxPkrZBG";
 export const DEVNET_RPC = "https://api.devnet.solana.com";
@@ -31,15 +32,54 @@ export async function connectWallet(wallet) {
   return account;
 }
 
-// This preparation screen only connects and inspects public chain state.
-// Match/session transaction signing is gated until deployment is verified.
-export function startDevnetSetup() {
+// Only explicit match setup buttons request signatures after deployment checks.
+export function startDevnetSetup(
+  onConnected = () => {},
+  onDisconnect = () => {},
+) {
   const registry = getWallets();
   const connection = new Connection(DEVNET_RPC, "confirmed");
   const dialog = document.getElementById("wallet-dialog");
   const list = document.getElementById("wallet-list");
   const status = document.getElementById("wallet-status");
   let connecting = false;
+  let selectedWallet, selectedAccount, unsubscribe;
+  async function activate(wallet, account) {
+    const readiness = await inspectDevnet(connection);
+    if (!readiness.deployed)
+      throw Error("The arena program is not deployed on devnet.");
+    selectedWallet = wallet;
+    selectedAccount = account;
+    sessionStorage.setItem("aochain:devnet-wallet", wallet.name);
+    document.getElementById("wallet-button").textContent =
+      `${account.address.slice(0, 4)}…${account.address.slice(-4)}`;
+    status.textContent =
+      "Connected to Solana devnet. Join the pairing, then approve each match setup step.";
+    document.getElementById("join").disabled = false;
+    document.getElementById("join").textContent = "Join devnet duel →";
+    unsubscribe?.();
+    unsubscribe = wallet.features["standard:events"]?.on(
+      "change",
+      ({ accounts }) => {
+        if (
+          accounts &&
+          !accounts.some((a) => a.address === selectedAccount?.address)
+        ) {
+          onDisconnect();
+          selectedWallet = undefined;
+          selectedAccount = undefined;
+          document.getElementById("wallet-button").textContent =
+            "Reconnect wallet";
+          document.getElementById("join").disabled = true;
+          status.textContent =
+            "Wallet account changed. Gameplay is paused; reconnect the original wallet to recover its match.";
+        }
+      },
+    );
+    onConnected(wallet, account);
+    document.getElementById("status").textContent =
+      "Wallet connected. Join the devnet pairing.";
+  }
   function render() {
     list.replaceChildren();
     const wallets = registry.get().filter(compatible);
@@ -63,10 +103,8 @@ export function startDevnetSetup() {
           document.getElementById("wallet-button").textContent =
             `${account.address.slice(0, 4)}…${account.address.slice(-4)}`;
           status.textContent = "Wallet connected. Checking devnet deployment…";
-          const readiness = await inspectDevnet(connection);
-          status.textContent = readiness.deployed
-            ? "Wallet connected. Program found on devnet; match integration verification is next."
-            : "Wallet connected. The arena program is not deployed on devnet yet. Matches remain disabled.";
+          await activate(wallet, account);
+          dialog.close();
         } catch (error) {
           status.textContent =
             error.message || "Connection failed. Please try again.";
@@ -78,15 +116,21 @@ export function startDevnetSetup() {
       list.append(button);
     }
   }
-  registry.on("register", render);
+  registry.on("register", () => {
+    render();
+    resumePreferred();
+  });
   registry.on("unregister", render);
   document.getElementById("wallet-button").onclick = () => {
-    render();
+    if (selectedWallet) {
+      list.replaceChildren();
+      list.textContent = `Connected with ${selectedWallet.name}. Match transactions use this provider directly.`;
+    } else render();
     dialog.showModal();
   };
   document.getElementById("wallet-close").onclick = () => dialog.close();
   document.querySelector(".build").textContent =
-    "DEVNET SETUP · MATCHES NOT ENABLED";
+    "MAGICBLOCK DEVNET · TEST MATCHES";
   document.getElementById("join").disabled = true;
   document.getElementById("join").textContent =
     "Devnet match setup in progress";
@@ -94,8 +138,33 @@ export function startDevnetSetup() {
     "Connect a wallet to check devnet readiness";
   document.getElementById("latency").textContent = "Devnet preparation";
   document.getElementById("events").textContent =
-    "This screen prepares wallet access. Local gameplay is available at /chain. No rewards or assets are enabled.";
+    "Connect a wallet, join a pairing, then approve match setup. Session actions run on MagicBlock US devnet. No rewards or assets are enabled.";
   document.querySelector("footer span:last-child").textContent =
-    "Solana devnet setup · no match execution yet";
+    "MagicBlock US devnet · test SOL only";
   document.getElementById("wallet-button").hidden = false;
+  let restoring = false;
+  async function resumePreferred() {
+    const preferred = sessionStorage.getItem("aochain:devnet-wallet");
+    const candidate = registry
+      .get()
+      .find((w) => w.name === preferred && compatible(w));
+    if (!candidate || selectedWallet || connecting || restoring) return;
+    restoring = true;
+    try {
+      const result = await candidate.features["standard:connect"].connect({
+        silent: true,
+      });
+      const account = result.accounts.find(
+        (a) =>
+          a.chains.includes("solana:devnet") &&
+          a.features.includes("solana:signTransaction"),
+      );
+      if (account) await activate(candidate, account);
+    } catch {
+      status.textContent = "Reconnect your wallet to restore its session.";
+    } finally {
+      restoring = false;
+    }
+  }
+  resumePreferred();
 }
