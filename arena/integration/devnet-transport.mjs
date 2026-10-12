@@ -63,6 +63,8 @@ export function createDevnetTransport(
     busy = false,
     settled = false,
     subscription,
+    cachedBlock,
+    receivedAt = 0,
     stopped = false;
   let slotMs = 50,
     lastClock,
@@ -99,6 +101,7 @@ export function createDevnetTransport(
     if (state.revision < revision) return;
     revision = state.revision;
     current = state;
+    receivedAt = Date.now();
     tick = Math.max(tick, Number(state.lastTick));
     onUpdate(view());
   }
@@ -178,6 +181,7 @@ export function createDevnetTransport(
     signer,
     instructions,
     walletApproval = false,
+    expectedNonce,
   ) {
     if (local.pending)
       throw Error(
@@ -185,7 +189,12 @@ export function createDevnetTransport(
       );
     if (!ownsAccount())
       throw Error("Wallet account changed. Reconnect before continuing.");
-    const block = await connection.getLatestBlockhash();
+    const now = Date.now();
+    const block =
+      connection === er && cachedBlock && now - cachedBlock.time < 500
+        ? cachedBlock.value
+        : await connection.getLatestBlockhash();
+    if (connection === er) cachedBlock = { value: block, time: now };
     const tx = new Transaction({ feePayer: signer.publicKey, ...block }).add(
       ...(walletApproval
         ? [
@@ -236,6 +245,22 @@ export function createDevnetTransport(
       onLog("Submission uncertain. Checking its signature before any retry.");
       throw error;
     }
+    // A processed account update with our exact nonce is execution proof on the ER.
+    // Keep the journal until that proof or signature reconciliation, never just RPC acceptance.
+    if (
+      connection === er &&
+      expectedNonce !== undefined &&
+      subscription !== undefined
+    ) {
+      for (let i = 0; i < 60 && !stopped; i++) {
+        if (current?.fighters[pairing.seat].nonce === expectedNonce) {
+          delete local.pending;
+          persist();
+          return;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 25));
+      }
+    }
     for (let i = 0; i < 40; i++) {
       if (await reconcile()) return;
       await new Promise((r) => setTimeout(r, connection === er ? 250 : 1000));
@@ -246,6 +271,15 @@ export function createDevnetTransport(
   }
   async function refresh() {
     if (stopped || busy || !pairing) return;
+    // Active gameplay is streamed by the ER subscription. Avoid blocking input on base RPC polling.
+    if (
+      step === "active" &&
+      current?.phase === 1 &&
+      !local.pending &&
+      Date.now() - receivedAt < 3000 &&
+      BigInt(tick) < current.expiresAt
+    )
+      return;
     busy = true;
     try {
       if (!ownsAccount()) {
@@ -396,7 +430,8 @@ export function createDevnetTransport(
         throw Error("Wallet account changed. Gameplay paused.");
       busy = true;
       try {
-        accept(await er.getAccountInfo(arena));
+        if (subscription === undefined || Date.now() - receivedAt > 1500)
+          accept(await er.getAccountInfo(arena));
         if (Date.now() / 1000 >= Number(current.sessionExpires))
           throw Error(
             "Session expired. Owner recovery is required; do not create another match.",
@@ -405,16 +440,16 @@ export function createDevnetTransport(
           body.kind
         ];
         if (kind === undefined) throw Error("Unknown action");
-        await send(er, session, [
-          act(
-            session.publicKey,
-            arena,
-            current.fighters[pairing.seat].nonce + 1n,
-            kind,
-            body.value || 0,
-          ),
-        ]);
-        accept(await er.getAccountInfo(arena));
+        const expectedNonce = current.fighters[pairing.seat].nonce + 1n;
+        await send(
+          er,
+          session,
+          [act(session.publicKey, arena, expectedNonce, kind, body.value || 0)],
+          false,
+          expectedNonce,
+        );
+        if (current.fighters[pairing.seat].nonce !== expectedNonce)
+          accept(await er.getAccountInfo(arena));
         return view();
       } finally {
         busy = false;

@@ -4,6 +4,7 @@ const $ = (id) => document.getElementById(id),
 const devnetMode = location.pathname === "/devnet";
 const chainMode = location.pathname === "/chain" || devnetMode;
 let transport = null;
+const renderedFighters = new Map();
 let latest = null,
   seat = -1,
   selected = false,
@@ -303,8 +304,40 @@ function frame(now) {
     }
   if (latest?.state) {
     latest.state.fighters.forEach((f, i) => {
-      const x = (f.x + 0.5) * 48,
-        y = (f.y + 1) * 48;
+      const targetX = (f.x + 0.5) * 48,
+        targetY = (f.y + 1) * 48;
+      let visual = renderedFighters.get(i);
+      if (
+        !visual ||
+        visual.generation !== latest.generation ||
+        Math.abs(visual.x - targetX) + Math.abs(visual.y - targetY) > 96
+      ) {
+        visual = {
+          x: targetX,
+          y: targetY,
+          targetX,
+          targetY,
+          fromX: targetX,
+          fromY: targetY,
+          since: now,
+          generation: latest.generation,
+        };
+        renderedFighters.set(i, visual);
+      }
+      if (visual.targetX !== targetX || visual.targetY !== targetY) {
+        Object.assign(visual, {
+          fromX: visual.x,
+          fromY: visual.y,
+          targetX,
+          targetY,
+          since: now,
+        });
+      }
+      const progress = Math.min(1, (now - visual.since) / 120);
+      visual.x = visual.fromX + (visual.targetX - visual.fromX) * progress;
+      visual.y = visual.fromY + (visual.targetY - visual.fromY) * progress;
+      const x = visual.x,
+        y = visual.y;
       ctx.fillStyle = i === seat ? "#d4b36a55" : "#66a4b655";
       ctx.beginPath();
       ctx.ellipse(x, y - 5, 18, 6, 0, 0, Math.PI * 2);

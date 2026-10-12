@@ -43,3 +43,9 @@ Use `node arena/integration/devnet-smoke.mjs` only for an explicit new test. `--
 No rewards, rating or asset transfers are enabled. Unit tests with mock Wallet Standard accounts establish capability and network filtering, not real wallet approval or devnet match execution.
 
 The browser journals the signed transaction signature before broadcasting and checks its status before allowing another operation. It rejects changed wallet accounts and altered transaction messages, and checks test SOL for fees, session funding and match rent before prompting. Nine JavaScript tests pass; real browser approval, outage recovery, revocation and expiry still require end-to-end proof.
+
+## Movement responsiveness
+
+The first live browser match displayed approximately 897 ms per signed action. The revised client uses fresh ER subscription state instead of reading the account before and after every input, and acknowledges an action only when that participant's exact expected nonce appears in authoritative state. If the stream does not acknowledge it, signature reconciliation retains the journal and blocks additional signing. Brief blockhash reuse reduces repeated reads; stale streams still refresh over RPC. Active streamed gameplay avoids blocking input on routine base-chain polling.
+
+Rendering interpolates confirmed tile transitions over 120 ms; it does not predict damage or move authoritative hitboxes. This improves continuity but cannot eliminate regional latency. The build and existing safety tests pass; the optimized transport still needs a fresh real-wallet benchmark. No latency target or Argentum movement parity is claimed yet.
