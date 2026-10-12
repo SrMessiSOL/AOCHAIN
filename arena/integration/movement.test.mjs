@@ -1,6 +1,19 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { predictMovement, reconcileMovement } from "../web/movement.mjs";
+import {
+  predictMovement,
+  reconcileMovement,
+  queueIntent,
+} from "../web/movement.mjs";
+test("forfeit survives input pressure; combat buffering is bounded and expires", () => {
+  const attack = queueIntent(null, "melee", 0, 100);
+  assert.equal(attack.expires, 450);
+  assert.equal(queueIntent(attack, "move", 2, 110), attack);
+  const exit = queueIntent(attack, "forfeit", 0, 120);
+  assert.equal(exit.expires, Infinity);
+  assert.equal(queueIntent(exit, "spell", 1, 130), exit);
+  assert.equal(queueIntent(exit, "move", 3, 140), exit);
+});
 const fixture = () => ({
   generation: 7,
   tick: 100,

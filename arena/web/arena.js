@@ -1,4 +1,8 @@
-import { predictMovement, reconcileMovement } from "/devnet-wallet.bundle.js";
+import {
+  predictMovement,
+  reconcileMovement,
+  queueIntent,
+} from "/devnet-wallet.bundle.js";
 const $ = (id) => document.getElementById(id),
   canvas = $("arena"),
   ctx = canvas.getContext("2d");
@@ -7,6 +11,7 @@ const chainMode = location.pathname === "/chain" || devnetMode;
 let transport = null;
 const renderedFighters = new Map();
 let predictedMovement = null;
+let queuedIntent = null;
 let latest = null,
   seat = -1,
   selected = false,
@@ -156,7 +161,18 @@ function update(data) {
   }
 }
 async function action(kind, value = 0) {
-  if (pending || seat < 0 || !latest?.state) return;
+  if (seat < 0 || !latest?.state || latest.state.phase === 2) return;
+  if (pending) {
+    queuedIntent = queueIntent(queuedIntent, kind, value, performance.now());
+    if (kind === "forfeit") {
+      held = null;
+      casting = false;
+      log(
+        "Forfeit queued. Waiting for the existing action before ending the match.",
+      );
+    }
+    return;
+  }
   pending = true;
   if (kind === "move")
     predictedMovement = predictMovement(latest, seat, value, performance.now());
@@ -173,6 +189,10 @@ async function action(kind, value = 0) {
   } finally {
     if (kind === "move") predictedMovement = null;
     pending = false;
+    const next = queuedIntent;
+    queuedIntent = null;
+    if (next && performance.now() < next.expires && latest?.state?.phase !== 2)
+      void action(next.kind, next.value);
   }
 }
 $("join").onclick = async () => {
@@ -371,7 +391,8 @@ function frame(now) {
       now - lastMove >= 200 &&
       latest.state.phase === 1 &&
       latest.tick >= latest.state.starts_at &&
-      !pending
+      !pending &&
+      queuedIntent?.kind !== "forfeit"
     ) {
       lastMove = now;
       action("move", held);

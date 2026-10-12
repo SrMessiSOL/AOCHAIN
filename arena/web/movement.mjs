@@ -45,3 +45,10 @@ export function reconcileMovement(prediction, data, now) {
     return null;
   return prediction;
 }
+export function queueIntent(existing, kind, value, now) {
+  if (existing?.kind === "forfeit") return existing;
+  if (kind === "forfeit") return { kind, value, expires: Infinity };
+  if (kind === "melee" || kind === "spell")
+    return { kind, value, expires: now + 350 };
+  return existing;
+}

@@ -168,4 +168,8 @@ export function startDevnetSetup(
   }
   resumePreferred();
 }
-export { predictMovement, reconcileMovement } from "../web/movement.mjs";
+export {
+  predictMovement,
+  reconcileMovement,
+  queueIntent,
+} from "../web/movement.mjs";

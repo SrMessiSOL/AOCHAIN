@@ -416,6 +416,16 @@ export function createDevnetTransport(
         await refresh();
         return view();
       }
+      if (url === "/api/action" && body.kind === "forfeit") {
+        // Never cancel or reuse a nonce from an uncertain transaction.
+        for (let i = 0; i < 60 && !stopped && (busy || local.pending); i++) {
+          if (!busy && local.pending) await reconcile();
+          await new Promise((resolve) => setTimeout(resolve, 250));
+        }
+        if (!busy && !local.pending && arena)
+          accept(await er.getAccountInfo(arena));
+        if (current?.phase === 2) return view();
+      }
       if (
         url !== "/api/action" ||
         busy ||
