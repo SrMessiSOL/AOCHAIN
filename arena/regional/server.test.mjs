@@ -16,16 +16,19 @@ async function wait(check, limit = 7000) {
   throw Error("Timed out waiting for realtime state");
 }
 function connect(pongDelay = 0) {
-  const ws = new WebSocket(`ws://127.0.0.1:${port}/realtime`, { origin });
+  const ws = new WebSocket(`ws://127.0.0.1:${port}/realtime`, {
+    origin,
+    autoPong: false,
+  });
+  ws.on("ping", (payload) =>
+    setTimeout(() => {
+      if (ws.readyState === 1) ws.pong(payload);
+    }, pongDelay),
+  );
   const messages = [];
   ws.on("message", (raw) => {
     const m = JSON.parse(raw);
     messages.push(m);
-    if (m.type === "probe")
-      setTimeout(() => {
-        if (ws.readyState === 1)
-          ws.send(JSON.stringify({ type: "pong", id: m.id }));
-      }, pongDelay);
   });
   return {
     ws,

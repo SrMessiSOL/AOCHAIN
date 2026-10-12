@@ -325,9 +325,26 @@ wss.on("connection", (ws) => {
   send(p, { type: "hello", region, demo, limit: 100 });
   const ping = () => {
     if (p.ping && Date.now() - p.ping.at < 3000) return;
-    p.ping = { id: randomBytes(12).toString("hex"), at: Date.now() };
-    send(p, { type: "probe", id: p.ping.id });
+    p.ping = {
+      id: randomBytes(12).toString("hex"),
+      at: Date.now(),
+      started: performance.now(),
+    };
+    if (ws.readyState === 1) ws.ping(p.ping.id);
   };
+  ws.on("pong", (payload) => {
+    if (payload.toString() !== p.ping?.id) return;
+    const ms = performance.now() - p.ping.started;
+    p.ping = null;
+    p.samples.push({ ms, at: Date.now() });
+    p.samples = p.samples.slice(-20);
+    send(p, {
+      type: "latency",
+      ping: Math.round(latencyScore(p.samples, Date.now())),
+      region,
+    });
+    matchmake();
+  });
   const timer = setInterval(ping, 500);
   ping();
   ws.on("message", async (raw) => {
@@ -338,20 +355,6 @@ wss.on("connection", (ws) => {
       }
       if (++p.budget > 40) throw Error("Input rate exceeded");
       const message = JSON.parse(raw);
-      if (message.type === "pong") {
-        if (message.id !== p.ping?.id) throw Error("Invalid latency challenge");
-        const ms = Date.now() - p.ping.at;
-        p.ping = null;
-        p.samples.push({ ms, at: Date.now() });
-        p.samples = p.samples.slice(-20);
-        send(p, {
-          type: "latency",
-          ping: Math.round(latencyScore(p.samples, Date.now())),
-          region,
-        });
-        matchmake();
-        return;
-      }
       if (message.type === "cancel") {
         dequeue(p);
         waiting(p, "Queue cancelled.");
