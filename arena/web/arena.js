@@ -196,6 +196,12 @@ function update(data) {
         selectedSpell = me.spellIds.includes(2) ? 2 : me.spellIds[0] || null;
         $("spellbook").value = String(selectedSpell);
         selected = false;
+        const equipment = me.equipment.map((id) => {
+          const el = document.createElement("div");
+          el.textContent = pvpData.equipment[id].name;
+          return el;
+        });
+        document.querySelector(".equipment").replaceChildren(...equipment);
       }
       $("spell").disabled = !me.spellIds.length;
       $("spell").textContent = selectedSpell
@@ -203,12 +209,6 @@ function update(data) {
         : "No magic spells for this class";
       $("cast-help").textContent =
         "Choose a spell, select Cast, then click yourself or your opponent.";
-      const equipment = me.equipment.map((id) => {
-        const el = document.createElement("div");
-        el.textContent = pvpData.equipment[id].name;
-        return el;
-      });
-      document.querySelector(".equipment").replaceChildren(...equipment);
       $("health-potion").textContent = `Health · R (${me.potions.health})`;
       $("mana-potion").textContent = `Mana · B (${me.potions.mana})`;
       $("mana-potion").disabled = !me.potions.mana;
