@@ -1,3 +1,4 @@
+import { predictMovement, reconcileMovement } from "/devnet-wallet.bundle.js";
 const $ = (id) => document.getElementById(id),
   canvas = $("arena"),
   ctx = canvas.getContext("2d");
@@ -5,6 +6,7 @@ const devnetMode = location.pathname === "/devnet";
 const chainMode = location.pathname === "/chain" || devnetMode;
 let transport = null;
 const renderedFighters = new Map();
+let predictedMovement = null;
 let latest = null,
   seat = -1,
   selected = false,
@@ -67,6 +69,11 @@ function update(data) {
   if (chainMode && Number.isInteger(data.seat)) seat = data.seat;
   const before = latest;
   latest = data;
+  predictedMovement = reconcileMovement(
+    predictedMovement,
+    data,
+    performance.now(),
+  );
   if (chainMode && seat >= 0) {
     $("join").hidden = true;
     $("player").textContent = `Player ${seat + 1}`;
@@ -151,6 +158,8 @@ function update(data) {
 async function action(kind, value = 0) {
   if (pending || seat < 0 || !latest?.state) return;
   pending = true;
+  if (kind === "move")
+    predictedMovement = predictMovement(latest, seat, value, performance.now());
   try {
     const result = await post("/api/action", {
       kind,
@@ -162,6 +171,7 @@ async function action(kind, value = 0) {
   } catch (e) {
     if (e.message !== errors.Cooldown) log(e.message);
   } finally {
+    if (kind === "move") predictedMovement = null;
     pending = false;
   }
 }
@@ -289,6 +299,7 @@ function drawSprite(name, x, y, scale, now) {
   );
 }
 function frame(now) {
+  predictedMovement = reconcileMovement(predictedMovement, latest, now);
   ctx.imageSmoothingEnabled = false;
   for (let y = 0; y < 12; y++)
     for (let x = 0; x < 16; x++) {
@@ -304,8 +315,9 @@ function frame(now) {
     }
   if (latest?.state) {
     latest.state.fighters.forEach((f, i) => {
-      const targetX = (f.x + 0.5) * 48,
-        targetY = (f.y + 1) * 48;
+      const displayed = i === seat && predictedMovement ? predictedMovement : f;
+      const targetX = (displayed.x + 0.5) * 48,
+        targetY = (displayed.y + 1) * 48;
       let visual = renderedFighters.get(i);
       if (
         !visual ||
@@ -342,8 +354,8 @@ function frame(now) {
       ctx.beginPath();
       ctx.ellipse(x, y - 5, 18, 6, 0, 0, Math.PI * 2);
       ctx.fill();
-      drawSprite("body" + f.heading, x, y, 1.5, now);
-      drawSprite("head" + f.heading, x, y - 6, 1.5, 0);
+      drawSprite("body" + displayed.heading, x, y, 1.5, now);
+      drawSprite("head" + displayed.heading, x, y - 6, 1.5, 0);
       ctx.font = "bold 12px system-ui";
       ctx.textAlign = "center";
       ctx.fillStyle = i === seat ? "#f1d28c" : "#a5d9e9";

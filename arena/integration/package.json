@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node --test client.test.mjs pairing.test.mjs devnet-wallet.test.mjs wallet-signing.test.mjs",
+    "test": "node --test client.test.mjs pairing.test.mjs devnet-wallet.test.mjs wallet-signing.test.mjs movement.test.mjs",
     "build:browser": "node build-browser.mjs",
     "start:browser": "node serve-browser.mjs",
     "check:devnet": "node devnet-preflight.mjs",
