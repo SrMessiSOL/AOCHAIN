@@ -7,6 +7,7 @@ const $ = (id) => document.getElementById(id),
   canvas = $("arena"),
   ctx = canvas.getContext("2d");
 const devnetMode = location.pathname === "/devnet";
+const regionalMode = location.pathname === "/ranked";
 const chainMode = location.pathname === "/chain" || devnetMode;
 let transport = null;
 const renderedFighters = new Map();
@@ -55,7 +56,7 @@ async function post(url, body = {}) {
   if (transport) {
     const result = await transport.post(url, body);
     $("latency").textContent =
-      `${url === "/api/join" ? "Pairing request" : "Signed action"} ${Math.round(performance.now() - started)} ms`;
+      `${url === "/api/join" ? "Queue request" : regionalMode ? "Realtime action" : "Signed action"} ${Math.round(performance.now() - started)} ms`;
     return result;
   }
   const r = await fetch(url, {
@@ -71,6 +72,7 @@ async function post(url, body = {}) {
   return result;
 }
 function update(data) {
+  if (regionalMode && Number.isInteger(data.seat)) seat = data.seat;
   if (chainMode && Number.isInteger(data.seat)) seat = data.seat;
   const before = latest;
   latest = data;
@@ -85,6 +87,17 @@ function update(data) {
   }
   const d = data.state;
   if (!d) return;
+  if (regionalMode) {
+    $("ranked-lobby").hidden = true;
+    document.querySelector(".arena-layout").hidden = false;
+    $("ready").hidden = true;
+    $("rematch").textContent = data.practice
+      ? "Practice again"
+      : "Play ranked again";
+    $("settlement-status").hidden = false;
+    $("settlement-status").textContent =
+      "Off-chain combat. No assets or rewards are transferred in this test.";
+  }
   if (chainMode) {
     $("settlement-status").hidden = false;
     $("settlement-status").textContent =
@@ -109,7 +122,9 @@ function update(data) {
         ? d.phase === 0
           ? "On-chain duel ready. Both players must ready up."
           : "Restored the authoritative match state."
-        : "New local duel. Both players must ready up.",
+        : regionalMode
+          ? "Opponent found. The regional duel starts after the countdown."
+          : "New local duel. Both players must ready up.",
     );
   }
   if (before?.state && before.generation === data.generation) {
@@ -200,6 +215,13 @@ $("join").onclick = async () => {
     const data = await post("/api/join");
     seat = data.seat;
     update(data);
+    if (regionalMode) {
+      $("join").hidden = true;
+      log(
+        "Ranked search started. Waiting for a compatible opponent below 100 ms.",
+      );
+      return;
+    }
     log(
       `You joined as player ${seat + 1}. Use a different browser or private window for the other player.`,
     );
@@ -379,7 +401,11 @@ function frame(now) {
       ctx.font = "bold 12px system-ui";
       ctx.textAlign = "center";
       ctx.fillStyle = i === seat ? "#f1d28c" : "#a5d9e9";
-      ctx.fillText(`Player ${i + 1}`, x, y - 88);
+      ctx.fillText(
+        latest.practice && i === 1 ? "Training opponent" : `Player ${i + 1}`,
+        x,
+        y - 88,
+      );
       ctx.fillStyle = "#12201a";
       ctx.fillRect(x - 24, y - 80, 48, 4);
       ctx.fillStyle = "#71c596";
@@ -400,7 +426,76 @@ function frame(now) {
   }
   requestAnimationFrame(frame);
 }
-if (location.pathname === "/devnet") {
+if (regionalMode) {
+  document.querySelector(".arena-layout").hidden = true;
+  document.querySelector(".build").textContent =
+    "REGIONAL REALTIME · LOCAL TEST";
+  document.querySelector("footer span:last-child").textContent =
+    "Off-chain authoritative combat · Solana outside the combat loop";
+  $("join").textContent = "Play ranked";
+  $("events").textContent =
+    "Choose Play ranked. Both players need measured ping below 100 ms to the same region. No wallet signatures for movement or attacks.";
+  transport = (await import("/regional-transport.mjs")).createRegionalTransport(
+    update,
+    log,
+    (message) => {
+      if (typeof message.demo === "boolean") {
+        $("pve").disabled = !message.demo;
+        $("pve").textContent = message.demo
+          ? "PvE practice · fight a bot"
+          : "PvE · unavailable";
+        $("pve").title =
+          "Practice using the current arena rules. Not a port of the Argentum Offline executable.";
+      }
+      $("ranked-lobby").hidden = false;
+      if (!latest?.state || latest.state.phase === 2)
+        document.querySelector(".arena-layout").hidden = true;
+      $("queue-status").textContent = message.reason;
+      $("status").textContent = message.reason;
+      if (message.reason.includes("cancelled")) $("join").hidden = false;
+    },
+    (message) => {
+      $("region-ping").textContent =
+        `Region: ${message.region} · measured ping: ${message.ping ?? "measuring"} ms · ranked limit: under 100 ms`;
+    },
+  );
+  $("cancel-queue").onclick = () =>
+    post("/api/cancel").catch((e) => log(e.message));
+  $("pve").onclick = () => post("/api/practice").catch((e) => log(e.message));
+  $("find-region").onclick = async () => {
+    const button = $("find-region");
+    button.disabled = true;
+    try {
+      if (latest?.state?.phase === 1)
+        throw Error("Finish the active match before changing regions.");
+      $("queue-status").textContent = "Measuring available regional servers…";
+      const { chooseRegion, probeRegion } =
+        await import("/region-selection.mjs");
+      const regions = await fetch("/regions.json").then((r) => r.json());
+      const results = await Promise.all(
+        regions.filter((r) => r.available).map(probeRegion),
+      );
+      const best = chooseRegion(results);
+      if (!best) {
+        $("queue-status").textContent =
+          "No available region is below 100 ms. You can keep waiting; ranked limits will not be widened.";
+        return;
+      }
+      if (new URL(best.url).origin === location.origin) {
+        $("queue-status").textContent =
+          `You are on the best available region: ${best.id} (${best.ping} ms). Choose Play ranked.`;
+        return;
+      }
+      await post("/api/cancel");
+      location.assign(new URL("/ranked", best.url));
+    } catch (error) {
+      log(error.message);
+    } finally {
+      button.disabled = false;
+    }
+  };
+  update(transport.start());
+} else if (location.pathname === "/devnet") {
   const { startDevnetSetup, createDevnetTransport } =
     await import("/devnet-wallet.bundle.js");
   const stages = {

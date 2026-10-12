@@ -226,6 +226,13 @@ const server = http.createServer(async (req, res) => {
     }
     if (req.method !== "GET")
       return json(res, 405, { error: "Method not allowed" });
+    if (url.pathname === "/devnet-wallet.bundle.js") {
+      const content = await readFile(
+        path.join(root, "work", "devnet-wallet.bundle.js"),
+      );
+      res.writeHead(200, { "Content-Type": "text/javascript" });
+      return res.end(content);
+    }
     const files = {
       "/": "index.html",
       "/arena.js": "arena.js",

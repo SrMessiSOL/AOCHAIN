@@ -263,3 +263,27 @@ dialog::backdrop {
     gap: 15px;
   }
 }
+/* Ranked waiting room stays distinct from the combat surface. */
+#ranked-lobby {
+  margin: 0 0 24px;
+  padding: 28px;
+  border: 1px solid #34515d;
+  border-radius: 16px;
+  background: #10212b;
+}
+#ranked-lobby[hidden] {
+  display: none;
+}
+#ranked-lobby h2 {
+  margin: 8px 0;
+  font-size: clamp(20px, 3vw, 28px);
+}
+#ranked-lobby p {
+  color: #adc2cb;
+}
+#ranked-lobby button {
+  margin: 8px 12px 0 0;
+}
+[hidden] {
+  display: none !important;
+}

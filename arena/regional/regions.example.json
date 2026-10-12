@@ -1,0 +1,7 @@
+[
+  {"id":"sa","location":"South America","status":"not-provisioned"},
+  {"id":"na","location":"North America","status":"not-provisioned"},
+  {"id":"eu","location":"Europe","status":"not-provisioned"},
+  {"id":"af","location":"West Africa","status":"not-provisioned"},
+  {"id":"sea","location":"Southeast Asia","status":"not-provisioned"}
+]

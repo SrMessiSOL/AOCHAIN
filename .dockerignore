@@ -1,0 +1,7 @@
+**/node_modules
+**/target
+**/work
+**/.env*
+.git
+**/*.log
+**/*keypair*.json

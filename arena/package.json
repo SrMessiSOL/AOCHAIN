@@ -4,9 +4,14 @@
   "type": "module",
   "scripts": {
     "start": "node scripts/serve.mjs",
-    "test": "node --test scripts/arena-http.test.mjs"
+    "test": "node --test scripts/arena-http.test.mjs regional/*.test.mjs",
+    "start:ranked": "node regional/server.mjs",
+    "test:ranked": "node --test regional/*.test.mjs"
   },
   "engines": {
     "node": ">=22"
+  },
+  "dependencies": {
+    "ws": "8.22.0"
   }
 }

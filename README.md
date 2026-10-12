@@ -1,16 +1,18 @@
 # AOCHAIN
 
-A browser-first Argentum Online PvP arena project exploring regional on-chain matches with MagicBlock on Solana.
+A browser-first Argentum Online PvP arena with regional off-chain combat and Solana character, item and gold ownership.
 
 ## Current status
 
-This repository starts from upstream [AOWeb](https://github.com/dcatanzaro/aoweb), commit `f55f02635e008ed0e831742d28be5385f0583bd3`. The original game code and Git history are preserved. An isolated [arena prototype](arena/README.md) includes a deterministic Rust combat core, a two-player local browser lab using upstream character sprites, and a Solana program with MagicBlock delegation/settlement. The actual program now passes a [local validator lifecycle test](arena/integration/README.md), including session combat and settlement back to the local base chain. The browser now also signs local MagicBlock actions and subscribes to authoritative state using disposable test identities. Two-browser movement, spell combat, completion and base-chain settlement were exercised locally. Wallet Standard browser integration is implemented for devnet; real two-wallet approval and combat verification are in progress. Public deployment, ranked matchmaking and the full PvP conversion remain pending.
+This repository starts from upstream [AOWeb](https://github.com/dcatanzaro/aoweb), commit `f55f02635e008ed0e831742d28be5385f0583bd3`. The original game code and history are preserved. The current [regional ranked milestone](docs/REGIONAL-RANKED.md) runs the fixed-loadout Rust duel rules off-chain over WebSocket: Play ranked, wait for a compatible opponent, automatically start a duel, forfeit and queue again. Both players require recent measured ping strictly below 100 ms to the same server. Local prediction and authoritative correction are implemented. Actual movement/melee tests and the browser queue/forfeit flow pass locally; measured loopback action acknowledgments were 31–35 ms. This is not global latency or full AOWeb combat parity proof.
+
+Regional container/configuration and best-region discovery are prepared, but cloud regions are not deployed. Real character admission and result settlement require connecting the existing Solana asset API; the local demo changes no assets, gold or rating. Argentum Offline PvE source is still unavailable: the supplied archive contains an executable and assets, not source code. Public authentication/recovery, global deployment, rating and complete PvP/PvE content remain release gates.
 
 This is a separate project from [ArgentumOnchain](https://github.com/SrMessiSOL/ArgentumOnchain). Its running server, database, website and deployment are unchanged. This fresh upstream copy does not yet include that project's English localization, security fixes or wallet features.
 
 ## Target experience
 
-The arena program is now deployed on Solana devnet. A scripted two-participant match exercised MagicBlock US delegation, session readiness, movement, spell combat, forfeit and verified settlement back to Solana devnet. An interrupted match was also recovered by timeout and settled. `/devnet` now provides wallet-signed match setup, scoped session gameplay and settlement verification through a loopback pairing coordinator. The scripted lifecycle is verified; real browser wallet matches, expiry and interrupted-operation recovery still require end-to-end validation. See [the devnet milestone](docs/DEVNET-MILESTONE.md).
+Movement and combat run on regional authoritative game servers; Solana ownership checks occur at admission and economy settlement stays outside the combat loop. The previous MagicBlock program and `/chain`/`/devnet` clients remain diagnostic experiments. Their scripted devnet lifecycle and settlement were verified, but observed gameplay delay motivated the off-chain ranked architecture. See [the devnet history](docs/DEVNET-MILESTONE.md).
 
 - Maximum-level characters with balanced class/loadout presets.
 - A regional town lobby, practice duels and ranked 1v1 arenas.

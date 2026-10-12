@@ -2,12 +2,13 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { setTimeout as delay } from "node:timers/promises";
+import { fileURLToPath } from "node:url";
 const port = 13202,
   base = `http://127.0.0.1:${port}`;
 test("actual Rust-backed local duel and HTTP boundaries", async () => {
   const process = spawn(
     globalThis.process.execPath,
-    ["arena/scripts/serve.mjs"],
+    [fileURLToPath(new URL("./serve.mjs", import.meta.url))],
     {
       env: { ...globalThis.process.env, PORT: String(port) },
       stdio: "pipe",
