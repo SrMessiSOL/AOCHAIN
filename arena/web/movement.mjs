@@ -11,6 +11,13 @@ export function predictMovement(data, seat, heading, now) {
     return null;
   const me = state.fighters[seat],
     other = state.fighters[1 - seat];
+  if (
+    data.tick < Number(me.paralyzedUntil || 0) ||
+    data.tick < Number(me.rootedUntil || 0)
+  )
+    return null;
+  if (data.tick < Number(me.stunnedUntil || 0))
+    heading = ((heading + 1) % 4) + 1;
   if (data.tick < Number(me.moveAt ?? me.move_at ?? 0)) return null;
   const delta = { 1: [0, -1], 2: [1, 0], 3: [0, 1], 4: [-1, 0] }[heading];
   if (!delta) return null;

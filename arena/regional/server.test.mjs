@@ -43,7 +43,12 @@ test("real websocket matchmaking rejects slow peers, runs Rust combat and record
     process.execPath,
     [fileURLToPath(new URL("./server.mjs", import.meta.url))],
     {
-      env: { ...process.env, PORT: String(port), AOCHAIN_DEMO: "1" },
+      env: {
+        ...process.env,
+        PORT: String(port),
+        AOCHAIN_DEMO: "1",
+        AOCHAIN_DEMO_LEGACY: "1",
+      },
       windowsHide: true,
       stdio: "pipe",
     },

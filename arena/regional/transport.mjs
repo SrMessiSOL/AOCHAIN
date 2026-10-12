@@ -1,8 +1,40 @@
-export function createRegionalTransport(onUpdate, onLog, onQueue, onLatency) {
+export function createRegionalTransport(
+  onUpdate,
+  onLog,
+  onQueue,
+  onLatency,
+  onResult = () => {},
+) {
   let ws,
     latest = { seat: -1, generation: 0, rematchVotes: [] },
     counter = 0,
     connected = false;
+  let portalOrigins = [],
+    admission = null;
+  const notifyParent = (message) => {
+    if (window.parent !== window)
+      for (const origin of portalOrigins)
+        window.parent.postMessage(message, origin);
+  };
+  const receiveAdmission = (event) => {
+    if (
+      event.source !== window.parent ||
+      window.parent === window ||
+      !portalOrigins.includes(event.origin) ||
+      event.data?.type !== "aochain-ranked-admission" ||
+      typeof event.data.ticket !== "string" ||
+      event.data.ticket.length > 4096
+    )
+      return;
+    if (admission === event.data.ticket) return;
+    admission = event.data.ticket;
+    send({ type: "ranked", ticket: admission });
+    onQueue({
+      reason:
+        "Character verified. Measuring the regional connection and finding an opponent.",
+      queued: true,
+    });
+  };
   const pending = new Map();
   const send = (message) => {
     if (!connected) throw Error("Regional server is disconnected");
@@ -10,6 +42,7 @@ export function createRegionalTransport(onUpdate, onLog, onQueue, onLatency) {
   };
   return {
     start() {
+      window.addEventListener("message", receiveAdmission);
       ws = new WebSocket(
         `${location.protocol === "https:" ? "wss:" : "ws:"}//${location.host}/realtime`,
       );
@@ -26,10 +59,14 @@ export function createRegionalTransport(onUpdate, onLog, onQueue, onLatency) {
         if (message.type === "probe")
           return send({ type: "pong", id: message.id });
         if (message.type === "hello") {
+          portalOrigins = message.portalOrigins || [];
           onQueue({
-            reason: "Choose Play ranked or practice while waiting.",
+            reason: message.demo
+              ? "Choose Play ranked."
+              : "Select a staked character in your AOCHAIN profile to play.",
             demo: message.demo,
           });
+          notifyParent({ type: "aochain-ranked-ready" });
           return onLog(
             message.demo
               ? "Local ranked demo: no wallet assets, gold or rating are changed."
@@ -44,7 +81,22 @@ export function createRegionalTransport(onUpdate, onLog, onQueue, onLatency) {
           return;
         }
         if (message.type === "result") {
-          onLog("Result recorded. This test awards no gold or rating.");
+          onResult(message);
+          onLog(
+            message.unlocked
+              ? "Result saved. Character unlocked."
+              : message.receiptStatus === "pending"
+                ? "Result delivery pending. Your character stays locked until it is saved."
+                : "Result recorded. No gold or rating is awarded.",
+          );
+          if (message.unlocked)
+            notifyParent({ type: "aochain-ranked-unlocked" });
+          return;
+        }
+        if (message.type === "released") {
+          onResult(message);
+          admission = null;
+          notifyParent({ type: "aochain-ranked-unlocked" });
           return;
         }
         if (message.type === "ack" || message.type === "error") {
@@ -77,6 +129,7 @@ export function createRegionalTransport(onUpdate, onLog, onQueue, onLatency) {
       return latest;
     },
     stop() {
+      window.removeEventListener("message", receiveAdmission);
       ws?.close();
     },
     async post(url, body = {}) {
@@ -87,7 +140,8 @@ export function createRegionalTransport(onUpdate, onLog, onQueue, onLatency) {
         }
         send({
           type: "ranked",
-          ticket: sessionStorage.getItem("aochain:ranked-admission"),
+          ticket:
+            admission || sessionStorage.getItem("aochain:ranked-admission"),
         });
         return latest;
       }

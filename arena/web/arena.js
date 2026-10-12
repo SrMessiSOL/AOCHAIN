@@ -8,10 +8,17 @@ const $ = (id) => document.getElementById(id),
   ctx = canvas.getContext("2d");
 const devnetMode = location.pathname === "/devnet";
 const regionalMode = location.pathname === "/ranked";
+const pvpData = regionalMode
+  ? await fetch("/pvp-data.json").then((r) => r.json())
+  : null;
 const chainMode = location.pathname === "/chain" || devnetMode;
 let transport = null;
+let regionalDemo = false;
+const savedMatches = new Set();
 const renderedFighters = new Map();
 let predictedMovement = null;
+let selectedSpell = 2,
+  bookKey = "";
 let queuedIntent = null;
 let latest = null,
   seat = -1,
@@ -88,6 +95,8 @@ function update(data) {
   const d = data.state;
   if (!d) return;
   if (regionalMode) {
+    document.querySelector(".intro").hidden = true;
+    document.body.classList.add("ranked-playing");
     $("ranked-lobby").hidden = true;
     document.querySelector(".arena-layout").hidden = false;
     $("ready").hidden = true;
@@ -95,8 +104,11 @@ function update(data) {
       ? "Practice again"
       : "Play ranked again";
     $("settlement-status").hidden = false;
-    $("settlement-status").textContent =
-      "Off-chain combat. No assets or rewards are transferred in this test.";
+    $("settlement-status").textContent = regionalDemo
+      ? "Local demo. No wallet assets or rewards are changed."
+      : savedMatches.has(data.generation)
+        ? "Result saved. Character unlocked."
+        : "Saving the result will unlock your character. Your saved inventory stays unchanged.";
   }
   if (chainMode) {
     $("settlement-status").hidden = false;
@@ -151,16 +163,56 @@ function update(data) {
           : "Duel in progress";
   $("ready").disabled = seat < 0 || d.phase !== 0 || d.ready[seat];
   $("forfeit").disabled = seat < 0 || d.phase === 2;
-  $("rematch").hidden = chainMode || seat < 0 || d.phase !== 2;
+  $("rematch").hidden =
+    chainMode || (regionalMode && !regionalDemo) || seat < 0 || d.phase !== 2;
   $("rematch").disabled = data.rematchVotes.includes(seat);
   $("join").hidden = seat >= 0;
   $("player").textContent = seat < 0 ? "Spectator" : `Player ${seat + 1}`;
   if (seat >= 0) {
     const me = d.fighters[seat];
-    $("hp").textContent = `${me.hp} / 120`;
-    $("mp").textContent = `${me.mana} / 100`;
+    $("player").textContent = me.name
+      ? `${me.name} · ${me.className} · Lv. ${me.level}`
+      : `Player ${seat + 1}`;
+    $("hp").textContent = `${me.hp} / ${me.maxHp ?? 120}`;
+    $("mp").textContent = `${me.mana} / ${me.maxMana ?? 100}`;
+    $("health").max = me.maxHp ?? 120;
+    $("mana").max = Math.max(1, me.maxMana ?? 100);
     $("health").value = me.hp;
     $("mana").value = me.mana;
+    if (regionalMode && Array.isArray(me.spellIds)) {
+      $("spellbook-label").hidden = false;
+      $("potions").hidden = false;
+      const key = `${data.generation}:${me.classId}`;
+      if (key !== bookKey) {
+        bookKey = key;
+        const options = me.spellIds.map((id) => {
+          const s = pvpData.spells[id],
+            option = document.createElement("option");
+          option.value = String(id);
+          option.textContent = `${s.name} · ${s.manaRequired} mana`;
+          return option;
+        });
+        $("spellbook").replaceChildren(...options);
+        selectedSpell = me.spellIds.includes(2) ? 2 : me.spellIds[0] || null;
+        $("spellbook").value = String(selectedSpell);
+        selected = false;
+      }
+      $("spell").disabled = !me.spellIds.length;
+      $("spell").textContent = selectedSpell
+        ? `✦ ${pvpData.spells[selectedSpell].name}`
+        : "No magic spells for this class";
+      $("cast-help").textContent =
+        "Choose a spell, select Cast, then click yourself or your opponent.";
+      const equipment = me.equipment.map((id) => {
+        const el = document.createElement("div");
+        el.textContent = pvpData.equipment[id].name;
+        return el;
+      });
+      document.querySelector(".equipment").replaceChildren(...equipment);
+      $("health-potion").textContent = `Health · R (${me.potions.health})`;
+      $("mana-potion").textContent = `Mana · B (${me.potions.mana})`;
+      $("mana-potion").disabled = !me.potions.mana;
+    }
   }
   $("spell").setAttribute("aria-pressed", String(selected));
   $("cast").disabled = !selected || seat < 0 || d.phase !== 1 || remaining > 0;
@@ -175,10 +227,11 @@ function update(data) {
     $("result").showModal();
   }
 }
-async function action(kind, value = 0) {
+async function action(kind, value = 0, spellId = selectedSpell) {
   if (seat < 0 || !latest?.state || latest.state.phase === 2) return;
   if (pending) {
     queuedIntent = queueIntent(queuedIntent, kind, value, performance.now());
+    if (queuedIntent && kind === "spell") queuedIntent.spellId = spellId;
     if (kind === "forfeit") {
       held = null;
       casting = false;
@@ -197,6 +250,9 @@ async function action(kind, value = 0) {
       value,
       nonce: latest.state.fighters[seat].nonce + 1,
       generation: latest.generation,
+      ...(regionalMode && latest.state.fighters[seat].spellIds
+        ? { spellId }
+        : {}),
     });
     update(result);
   } catch (e) {
@@ -207,7 +263,7 @@ async function action(kind, value = 0) {
     const next = queuedIntent;
     queuedIntent = null;
     if (next && performance.now() < next.expires && latest?.state?.phase !== 2)
-      void action(next.kind, next.value);
+      void action(next.kind, next.value, next.spellId);
   }
 }
 $("join").onclick = async () => {
@@ -258,7 +314,11 @@ $("spell").onclick = () => {
 };
 $("cast").onclick = () => {
   casting = true;
-  log("Casting armed. Click your opponent to release Arcane bolt.");
+  log(
+    regionalMode && selectedSpell
+      ? `Casting ${pvpData.spells[selectedSpell].name}. Click a valid target.`
+      : "Casting armed. Click your opponent to release Arcane bolt.",
+  );
   canvas.focus();
 };
 $("result-close").onclick = () => {
@@ -280,10 +340,18 @@ const headings = {
   a: 4,
   ArrowLeft: 4,
 };
+$("spellbook").onchange = () => {
+  selectedSpell = Number($("spellbook").value);
+  selected = true;
+  casting = false;
+  if (latest) update(latest);
+};
+$("health-potion").onclick = () => action("potion", 0);
+$("mana-potion").onclick = () => action("potion", 1);
 window.addEventListener("keydown", (e) => {
   if (
     document.querySelector("dialog[open]") ||
-    ["INPUT", "TEXTAREA"].includes(e.target.tagName)
+    ["INPUT", "TEXTAREA", "SELECT"].includes(e.target.tagName)
   )
     return;
   if (headings[e.key]) {
@@ -298,6 +366,10 @@ window.addEventListener("keydown", (e) => {
     casting = false;
     log("Casting cancelled.");
   }
+  if (regionalMode && !e.repeat && e.key.toLowerCase() === "r")
+    action("potion", 0);
+  if (regionalMode && !e.repeat && e.key.toLowerCase() === "b")
+    action("potion", 1);
 });
 window.addEventListener("keyup", (e) => {
   if (headings[e.key] === held) held = null;
@@ -311,17 +383,23 @@ canvas.addEventListener("click", (e) => {
   const rect = canvas.getBoundingClientRect(),
     x = ((e.clientX - rect.left) * canvas.width) / rect.width,
     y = ((e.clientY - rect.top) * canvas.height) / rect.height;
-  const target = latest.state.fighters[1 - seat];
-  if (
-    Math.abs(x - (target.x + 0.5) * 48) < 28 &&
-    Math.abs(y - (target.y + 0.5) * 48) < 50
-  ) {
-    casting = false;
-    action("spell", 1 - seat);
-  } else
-    log(
-      "Choose the opposing fighter. Clicking the ground does not move or cast.",
-    );
+  const targets = regionalMode ? [seat, 1 - seat] : [1 - seat];
+  for (const index of targets) {
+    const target = latest.state.fighters[index];
+    if (target.hidden) continue;
+    const visual = renderedFighters.get(index);
+    if (
+      Math.abs(x - (visual?.x ?? (target.x + 0.5) * 48)) < 28 &&
+      Math.abs(y - ((visual?.y ?? (target.y + 1) * 48) - 40)) < 50
+    ) {
+      casting = false;
+      void action("spell", index);
+      return;
+    }
+  }
+  log(
+    "Choose the opposing fighter. Clicking the ground does not move or cast.",
+  );
 });
 function drawSprite(name, x, y, scale, now) {
   const entry = sprites[name],
@@ -357,6 +435,7 @@ function frame(now) {
     }
   if (latest?.state) {
     latest.state.fighters.forEach((f, i) => {
+      if (f.hidden) return;
       const displayed = i === seat && predictedMovement ? predictedMovement : f;
       const targetX = (displayed.x + 0.5) * 48,
         targetY = (displayed.y + 1) * 48;
@@ -402,14 +481,17 @@ function frame(now) {
       ctx.textAlign = "center";
       ctx.fillStyle = i === seat ? "#f1d28c" : "#a5d9e9";
       ctx.fillText(
-        latest.practice && i === 1 ? "Training opponent" : `Player ${i + 1}`,
+        (f.mimicUntil > latest.tick && f.mimicName ? f.mimicName : f.name) ||
+          (latest.practice && i === 1
+            ? "Training opponent"
+            : `Player ${i + 1}`),
         x,
         y - 88,
       );
       ctx.fillStyle = "#12201a";
       ctx.fillRect(x - 24, y - 80, 48, 4);
       ctx.fillStyle = "#71c596";
-      ctx.fillRect(x - 24, y - 80, (48 * f.hp) / 120, 4);
+      ctx.fillRect(x - 24, y - 80, (48 * f.hp) / (f.maxHp ?? 120), 4);
     });
     if (
       held &&
@@ -440,16 +522,29 @@ if (regionalMode) {
     log,
     (message) => {
       if (typeof message.demo === "boolean") {
-        $("pve").disabled = !message.demo;
+        regionalDemo = message.demo;
+        document.querySelector(".build").textContent = message.demo
+          ? "REGIONAL REALTIME · LOCAL TEST"
+          : "REGIONAL RANKED · VERIFIED CHARACTER";
+        document.querySelector("#result p:nth-of-type(2)").textContent =
+          "Gold and rating rewards are not enabled in this PvP test.";
+        $("pve").hidden = true;
+        $("join").hidden = !message.demo;
+        $("find-region").disabled = !message.demo;
         $("pve").textContent = message.demo
           ? "PvE practice · fight a bot"
           : "PvE · unavailable";
         $("pve").title =
           "Practice using the current arena rules. Not a port of the Argentum Offline executable.";
       }
+      if (typeof message.queued === "boolean")
+        $("join").hidden = message.queued;
       $("ranked-lobby").hidden = false;
-      if (!latest?.state || latest.state.phase === 2)
+      if (!latest?.state || latest.state.phase === 2) {
         document.querySelector(".arena-layout").hidden = true;
+        document.querySelector(".intro").hidden = false;
+        document.body.classList.remove("ranked-playing");
+      }
       $("queue-status").textContent = message.reason;
       $("status").textContent = message.reason;
       if (message.reason.includes("cancelled")) $("join").hidden = false;
@@ -457,6 +552,14 @@ if (regionalMode) {
     (message) => {
       $("region-ping").textContent =
         `Region: ${message.region} · measured ping: ${message.ping ?? "measuring"} ms · ranked limit: under 100 ms`;
+    },
+    (message) => {
+      if (message.unlocked && message.matchId)
+        savedMatches.add(message.matchId);
+      if (!regionalDemo)
+        $("settlement-status").textContent = message.unlocked
+          ? "Character unlocked. Your saved inventory is unchanged."
+          : "Saving the match result. Your character stays reserved until confirmation.";
     },
   );
   $("cancel-queue").onclick = () =>

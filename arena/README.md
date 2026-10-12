@@ -1,6 +1,6 @@
 # AOCHAIN arena prototype
 
-The isolated arena lives here. It does not change or connect to the running ArgentumOnchain realm.
+The arena lives here. `/ranked` connects to the existing ArgentumOnchain asset API when both sides are configured. The local rules, `/chain` and `/devnet` labs remain isolated diagnostics. Pulling this repository does not modify a running realm. See [character integration](../docs/RANKED-ASSET-INTEGRATION.md).
 
 ## Play the local rules lab
 

@@ -3,10 +3,19 @@ import http from "node:http";
 import { WebSocketServer } from "ws";
 import { spawn } from "node:child_process";
 import { randomUUID, randomBytes, createHmac } from "node:crypto";
-import { readFile, mkdir, open } from "node:fs/promises";
+import {
+  readFile,
+  mkdir,
+  open,
+  writeFile,
+  readdir,
+  rename,
+} from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import readline from "node:readline";
 import { eligible, latencyScore, verifyAdmission } from "./policy.mjs";
+import { createAssetClient } from "./asset-client.mjs";
+import { preset } from "./pvp-engine.mjs";
 const root = new URL("../", import.meta.url);
 const port = Number(process.env.PORT || 3210),
   host = process.env.HOST || "127.0.0.1";
@@ -14,6 +23,12 @@ const region = process.env.REGION_ID || "local";
 const origin = process.env.PUBLIC_ORIGIN || `http://127.0.0.1:${port}`;
 const demo = process.env.AOCHAIN_DEMO === "1";
 const secret = process.env.ASSET_ADMISSION_SECRET;
+const assetClient =
+  !demo && process.env.ASSET_SERVICE_URL
+    ? createAssetClient({ url: process.env.ASSET_SERVICE_URL, region, secret })
+    : null;
+if (!demo && !assetClient)
+  throw Error("Configure ASSET_SERVICE_URL before admitting real characters");
 const allowedOrigins = new Set([
   origin,
   ...(process.env.PORTAL_ORIGINS || "").split(",").filter(Boolean),
@@ -65,6 +80,116 @@ const players = new Set(),
   activeCharacters = new Map();
 const output = new URL("work/regional-results.jsonl", root);
 await mkdir(new URL("work/", root), { recursive: true });
+const outbox = new URL("work/ranked-outbox/", root);
+await mkdir(outbox, { recursive: true });
+const delivery = new Map();
+async function persistReceipt(receipt) {
+  await durableJson(receipt.matchId + ".json", receipt);
+}
+async function durableJson(name, value) {
+  const file = new URL(name, outbox),
+    temporary = new URL(name + "." + randomUUID() + ".tmp", outbox),
+    handle = await open(temporary, "wx", 0o600);
+  try {
+    await handle.writeFile(JSON.stringify(value));
+    await handle.sync();
+  } finally {
+    await handle.close();
+  }
+  await rename(temporary, file);
+}
+async function recoverInterrupted(journal, match) {
+  if (delivery.has(journal.matchId)) return;
+  const receipt = {
+    ...journal,
+    finishedAt: Date.now(),
+    winner: 2,
+    state: { phase: 2, winner: 2 },
+    outcome: "interrupted",
+    settlement: "awaiting-asset-service",
+    demo: false,
+  };
+  await persistReceipt(receipt);
+  if (match) {
+    match.receipt = receipt;
+    match.finished = true;
+    match.persisted = true;
+    if (match.state) {
+      match.state = { ...match.state, phase: 2, winner: 2 };
+      match.broadcast?.();
+    }
+  }
+  await deliver(receipt, match);
+}
+async function deliver(receipt, match) {
+  if (!assetClient || delivery.has(receipt.matchId)) return;
+  delivery.set(receipt.matchId, true);
+  try {
+    await assetClient.finish(receipt);
+    if (match) match.saved = true;
+    await writeFile(
+      new URL(receipt.matchId + ".done", outbox),
+      "saved and unlocked\n",
+      { mode: 0o600 },
+    );
+    if (match)
+      for (const p of match.players) {
+        activeCharacters.delete(p.claims?.character);
+        p.claims = null;
+        send(p, {
+          type: "result",
+          matchId: match.id,
+          receiptStatus: "saved",
+          unlocked: true,
+          rewardsEnabled: false,
+        });
+      }
+  } catch {
+    // Admission may have failed before the SQL start transaction. Release only
+    // queued locks in that case; an active lock rejects release and stays fenced.
+    if (receipt.outcome === "interrupted") {
+      try {
+        for (const claim of receipt.players) await assetClient.release(claim);
+        await writeFile(
+          new URL(receipt.matchId + ".done", outbox),
+          "no active match; queues released\n",
+          { mode: 0o600 },
+        );
+        if (match) {
+          match.saved = true;
+          for (const p of match.players) {
+            activeCharacters.delete(p.claims?.character);
+            p.claims = null;
+            send(p, { type: "released", unlocked: true });
+          }
+        }
+        return;
+      } catch {
+        /* Never infer that an active match has unlocked. */
+      }
+    }
+    if (match)
+      match.players.forEach((p) =>
+        send(p, {
+          type: "result",
+          matchId: match.id,
+          receiptStatus: "pending",
+          unlocked: false,
+          rewardsEnabled: false,
+        }),
+      );
+  } finally {
+    delivery.delete(receipt.matchId);
+  }
+}
+async function releaseAdmission(p) {
+  if (!p.claims || demo) return;
+  const claim = p.claims;
+  await assetClient.release(claim);
+  activeCharacters.delete(claim.character);
+  p.claims = null;
+  send(p, { type: "released", unlocked: true });
+}
 const send = (player, body) => {
   if (player.ws.readyState === 1 && player.ws.bufferedAmount < 65536)
     player.ws.send(JSON.stringify(body));
@@ -72,6 +197,7 @@ const send = (player, body) => {
 function waiting(p, reason) {
   send(p, {
     type: "queue",
+    queued: queue.includes(p),
     reason,
     region,
     ping: Number.isFinite(latencyScore(p.samples, Date.now()))
@@ -105,7 +231,7 @@ function matchmake() {
     startMatch(a, b);
   }
 }
-function startMatch(a, b) {
+async function startMatch(a, b) {
   const match = {
     id: randomUUID(),
     players: [a, b],
@@ -121,16 +247,77 @@ function startMatch(a, b) {
     p.match = match;
     p.seat = seat;
   }
-  const runner = spawn(executable, [], {
-    stdio: ["pipe", "pipe", "pipe"],
-    windowsHide: true,
-  });
+  if (!demo) {
+    try {
+      await durableJson(match.id + ".active", {
+        version: 1,
+        matchId: match.id,
+        region,
+        players: match.players.map((p) => p.claims),
+      });
+      let started;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          started = await assetClient.start(
+            match.id,
+            match.players.map((p) => p.claims),
+          );
+          break;
+        } catch (error) {
+          if (attempt === 2) throw error;
+        }
+      }
+      if (started.state === "complete")
+        throw Error("This match already completed");
+    } catch {
+      match.failed = true;
+      match.players.forEach((p) =>
+        send(p, {
+          type: "error",
+          message:
+            "Match admission needs recovery. Character remains locked; no duel was started.",
+        }),
+      );
+      return;
+    }
+  }
+  const legacy = process.env.AOCHAIN_DEMO_LEGACY === "1" && demo;
+  const profiles = match.players.map(
+    (p, i) =>
+      p.claims?.profile || {
+        classId: 1,
+        raceId: 1,
+        name: p.bot ? "Training opponent" : `Arena mage ${i + 1}`,
+      },
+  );
+  const runner = spawn(
+    legacy ? executable : process.execPath,
+    legacy ? [] : [fileURLToPath(new URL("pvp-runner.mjs", import.meta.url))],
+    {
+      stdio: ["pipe", "pipe", "pipe"],
+      windowsHide: true,
+      env: { ...process.env, RANKED_PROFILES: JSON.stringify(profiles) },
+    },
+  );
   match.runner = runner;
   const snapshot = (p) => ({
     type: "state",
     seat: p.seat,
     generation: match.id,
-    state: match.state,
+    state: match.state
+      ? {
+          ...match.state,
+          fighters: match.state.fighters.map((f, i) =>
+            i !== p.seat &&
+            f.invisibleUntil >
+              match.tick + Math.floor((Date.now() - match.observed) / 50) &&
+            f.revealedUntil <=
+              match.tick + Math.floor((Date.now() - match.observed) / 50)
+              ? { ...f, x: null, y: null, hidden: true }
+              : f,
+          ),
+        }
+      : null,
     tick: match.tick + Math.floor((Date.now() - match.observed) / 50),
     tickMs: 50,
     rematchVotes: [],
@@ -202,6 +389,10 @@ function startMatch(a, b) {
         } finally {
           await handle.close();
         }
+        if (!demo) {
+          await persistReceipt(receipt);
+          match.receipt = receipt;
+        }
       })()
         .then(() => {
           match.persisted = true;
@@ -213,6 +404,7 @@ function startMatch(a, b) {
               rewardsEnabled: false,
             }),
           );
+          if (!demo) void deliver(receipt, match);
         })
         .catch(() =>
           match.players.forEach((p) =>
@@ -230,6 +422,14 @@ function startMatch(a, b) {
     .then(async () => {
       await match.execute({ actor: 0, nonce: 1, kind: "ready" });
       await match.execute({ actor: 1, nonce: 1, kind: "ready" });
+      for (const p of match.players)
+        if (!p.bot && p.ws.readyState !== 1 && match.state.phase !== 2)
+          await match.execute({
+            actor: p.seat,
+            nonce: match.state.fighters[p.seat].nonce + 1,
+            kind: "forfeit",
+            value: 0,
+          });
     })
     .catch(failure);
 }
@@ -263,6 +463,7 @@ const server = http.createServer(async (req, res) => {
       "/sprites.json": "web/sprites.json",
       "/regional-transport.mjs": "regional/transport.mjs",
       "/region-selection.mjs": "regional/region-selection.mjs",
+      "/pvp-data.json": "regional/pvp-data.json",
       "/devnet-wallet.bundle.js": "work/devnet-wallet.bundle.js",
     };
     const graphics = /^\/graphics\/(\d+)\.png$/.exec(pathname);
@@ -288,7 +489,7 @@ const server = http.createServer(async (req, res) => {
               : "text/html",
       "Cache-Control": "no-store",
       "X-Content-Type-Options": "nosniff",
-      "Content-Security-Policy": `default-src 'self'; connect-src ${connectSources}; frame-ancestors 'none'`,
+      "Content-Security-Policy": `default-src 'self'; connect-src ${connectSources}; frame-ancestors ${[...allowedOrigins].join(" ")}`,
     });
     res.end(content);
   } catch {
@@ -322,7 +523,13 @@ wss.on("connection", (ws) => {
     inflight: false,
   };
   players.add(p);
-  send(p, { type: "hello", region, demo, limit: 100 });
+  send(p, {
+    type: "hello",
+    region,
+    demo,
+    limit: 100,
+    portalOrigins: [...allowedOrigins],
+  });
   const ping = () => {
     if (p.ping && Date.now() - p.ping.at < 3000) return;
     p.ping = {
@@ -356,7 +563,10 @@ wss.on("connection", (ws) => {
       if (++p.budget > 40) throw Error("Input rate exceeded");
       const message = JSON.parse(raw);
       if (message.type === "cancel") {
+        if (p.match && !p.match.finished)
+          throw Error("Forfeit the active match before leaving");
         dequeue(p);
+        await releaseAdmission(p);
         waiting(p, "Queue cancelled.");
         return;
       }
@@ -385,6 +595,12 @@ wss.on("connection", (ws) => {
         if (!demo && !p.claims) {
           const claims = verifyAdmission(message.ticket, secret, region);
           if (
+            claims.profile?.preset !== "ranked-newbie-v1" ||
+            claims.profile.characterId !== claims.character
+          )
+            throw Error("Unsupported character preset");
+          preset(claims.profile);
+          if (
             usedTickets.has(claims.ticketId) ||
             activeCharacters.has(claims.character)
           )
@@ -404,7 +620,9 @@ wss.on("connection", (ws) => {
           match.finished ||
           p.inflight ||
           message.generation !== match.id ||
-          !["move", "melee", "spell", "forfeit"].includes(message.kind) ||
+          !["move", "melee", "spell", "forfeit", "potion"].includes(
+            message.kind,
+          ) ||
           !Number.isSafeInteger(message.nonce) ||
           !Number.isInteger(message.value) ||
           message.value < 0 ||
@@ -418,6 +636,7 @@ wss.on("connection", (ws) => {
             nonce: message.nonce,
             kind: message.kind,
             value: message.value,
+            spellId: message.spellId,
           });
           send(p, { type: "ack", id: message.id, error: result.error });
         } finally {
@@ -445,19 +664,29 @@ wss.on("connection", (ws) => {
     dequeue(p);
     players.delete(p);
     const m = p.match;
+    if (!m || m.finished || m.failed) void releaseAdmission(p).catch(() => {});
     if (m && !m.finished && m.state)
-      m.execute({
-        actor: p.seat,
-        nonce: m.state.fighters[p.seat].nonce + 1,
-        kind: "forfeit",
-        value: 0,
-      }).catch(() => {});
+      m.execute({ actor: 0, nonce: 0, kind: "snapshot" })
+        .then((result) => {
+          if (result.state.phase !== 2)
+            return m.execute({
+              actor: p.seat,
+              nonce: result.state.fighters[p.seat].nonce + 1,
+              kind: "forfeit",
+              value: 0,
+            });
+        })
+        .catch(() => {});
   });
 });
 const heartbeat = setInterval(() => {
   matchmake();
   for (const m of matches) {
     if (m.state && !m.finished) {
+      if (!m.commands.length && process.env.AOCHAIN_DEMO_LEGACY !== "1")
+        void m
+          .execute({ actor: 0, nonce: 0, kind: "snapshot" })
+          .catch(() => {});
       m.broadcast();
       const bot = m.players[1];
       const nowTick = m.tick + Math.floor((Date.now() - m.observed) / 50);
@@ -493,9 +722,13 @@ const heartbeat = setInterval(() => {
           value = heading;
         }
         if (kind)
-          m.execute({ actor: 1, nonce: me.nonce + 1, kind, value }).catch(
-            () => {},
-          );
+          m.execute({
+            actor: 1,
+            nonce: me.nonce + 1,
+            kind,
+            value,
+            ...(process.env.AOCHAIN_DEMO_LEGACY !== "1" ? { spellId: 2 } : {}),
+          }).catch(() => {});
       }
       if (
         m.state.phase === 1 &&
@@ -510,12 +743,75 @@ const heartbeat = setInterval(() => {
           value: 0,
         }).catch(() => {});
     }
-    if (m.finished && m.persisted && Date.now() - m.observed > 60000) {
-      m.runner.kill();
+    if (
+      m.finished &&
+      m.persisted &&
+      (demo || m.saved) &&
+      Date.now() - m.observed > 60000
+    ) {
+      m.runner?.kill();
       matches.delete(m);
     }
   }
 }, 100);
+const recovery = setInterval(
+  async () => {
+    try {
+      for (const p of queue) {
+        if (demo || !p.claims || p.renewing) continue;
+        p.renewing = true;
+        try {
+          const renewed = await assetClient.renew(p.claims);
+          p.claims = verifyAdmission(renewed.ticket, secret, region);
+        } catch {
+          dequeue(p);
+          send(p, {
+            type: "error",
+            message:
+              "Queued character admission expired or needs attention. No match was started.",
+          });
+        } finally {
+          p.renewing = false;
+        }
+      }
+      if (!assetClient) return;
+      const files = await readdir(outbox);
+      for (const file of files.filter(
+        (f) =>
+          f.endsWith(".json") && !files.includes(f.replace(".json", ".done")),
+      )) {
+        const receipt = JSON.parse(
+          await readFile(new URL(file, outbox), "utf8"),
+        );
+        if (receipt.region === region)
+          void deliver(
+            receipt,
+            [...matches].find((m) => m.id === receipt.matchId),
+          );
+      }
+      for (const file of files.filter((f) => f.endsWith(".active"))) {
+        const id = file.slice(0, -7);
+        if (files.includes(id + ".json") || files.includes(id + ".done"))
+          continue;
+        const live = [...matches].find((m) => m.id === id);
+        if (live && !live.failed) continue;
+        const journal = JSON.parse(
+          await readFile(new URL(file, outbox), "utf8"),
+        );
+        if (journal.region === region) await recoverInterrupted(journal, live);
+      }
+    } catch {
+      console.warn(
+        "Ranked recovery requires attention; existing locks were preserved",
+      );
+    }
+  },
+  Math.max(
+    1000,
+    Math.min(60000, Number(process.env.RANKED_RECOVERY_MS) || 20000),
+  ),
+);
+recovery.unref();
 server.listen(port, host, () =>
   console.log(
     `Regional ranked ${region}: ${origin}/ranked (${demo ? "DEMO — no assets or rewards" : "verified asset admission required"})`,
@@ -523,8 +819,9 @@ server.listen(port, host, () =>
 );
 function stop() {
   clearInterval(heartbeat);
+  clearInterval(recovery);
   for (const p of players) p.ws.close();
-  for (const m of matches) m.runner.kill();
+  for (const m of matches) m.runner?.kill();
   server.close();
 }
 process.on("SIGINT", () => {

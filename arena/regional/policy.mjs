@@ -18,6 +18,7 @@ export function eligible(player, now) {
   return (
     player.ws.readyState === 1 &&
     !player.match &&
+    !player.renewing &&
     latencyScore(player.samples, now) < 100
   );
 }
@@ -40,7 +41,7 @@ export function verifyAdmission(ticket, secret, region, now = Date.now()) {
     claims.region !== region ||
     !Number.isSafeInteger(claims.expires) ||
     claims.expires <= now ||
-    claims.expires > now + 60000 ||
+    claims.expires > now + 90000 ||
     !["wallet", "character", "lockId", "revision", "ticketId"].every(
       (k) =>
         typeof claims[k] === "string" &&

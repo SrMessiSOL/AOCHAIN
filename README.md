@@ -4,21 +4,23 @@ A browser-first Argentum Online PvP arena with regional off-chain combat and Sol
 
 ## Current status
 
-This repository starts from upstream [AOWeb](https://github.com/dcatanzaro/aoweb), commit `f55f02635e008ed0e831742d28be5385f0583bd3`. The original game code and history are preserved. The current [regional ranked milestone](docs/REGIONAL-RANKED.md) runs the fixed-loadout Rust duel rules off-chain over WebSocket: Play ranked, wait for a compatible opponent, automatically start a duel, forfeit and queue again. Both players require recent measured ping strictly below 100 ms to the same server. Local prediction and authoritative correction are implemented. Actual movement/melee tests and the browser queue/forfeit flow pass locally; measured loopback action acknowledgments were 31–35 ms. This is not global latency or full AOWeb combat parity proof.
+This repository starts from upstream [AOWeb](https://github.com/dcatanzaro/aoweb), commit `f55f02635e008ed0e831742d28be5385f0583bd3`. Original code and history are preserved. The [regional ranked milestone](docs/REGIONAL-RANKED.md) runs authoritative off-chain combat over WebSocket: Play ranked, wait for a compatible opponent, automatically start a duel and forfeit or finish. Both players require recent measured ping strictly below 100 ms to the same server. Local prediction and authoritative correction are implemented. Local movement/melee and browser queue/forfeit checks pass; loopback measurements are not global latency or full AOWeb combat parity proof.
 
-Regional container/configuration and best-region discovery are prepared, but cloud regions are not deployed. Real character admission and result settlement require connecting the existing Solana asset API; the local demo changes no assets, gold or rating. Argentum Offline PvE source is still unavailable: the supplied archive contains an executable and assets, not source code. Public authentication/recovery, global deployment, rating and complete PvP/PvE content remain release gates.
+The [character integration](docs/RANKED-ASSET-INTEGRATION.md) now implements owned staked-character admission, exclusive database locks, temporary level-50/newbie presets, the class-valid duel spellbook, and transactional result/unlock with duplicate and worker-restart recovery. The normalized authoritative Node engine is now the default; the earlier Rust engine is a legacy diagnostic. Saved character inventory, gold and progression remain unchanged. Five isolated SQL/WebSocket lifecycle tests pass; stake is mocked, so these are not live NFT or native PostgreSQL concurrency proof.
 
-This is a separate project from [ArgentumOnchain](https://github.com/SrMessiSOL/ArgentumOnchain). Its running server, database, website and deployment are unchanged. This fresh upstream copy does not yet include that project's English localization, security fixes or wallet features.
+Regional container/configuration and discovery are prepared, but cloud regions are not deployed. The paired API and portal changes must be deployed/configured on the existing server and Vercel before real characters can play. The local demo changes no assets, gold or rating. PvE is deferred to a separate design.
+
+This is a separate project from [ArgentumOnchain](https://github.com/SrMessiSOL/ArgentumOnchain). Its API remains the sole character/custody authority; this repository does not duplicate minting or the gold ledger. Changes are prepared in both repositories without modifying the running server or production database.
 
 ## Target experience
 
 Movement and combat run on regional authoritative game servers; Solana ownership checks occur at admission and economy settlement stays outside the combat loop. The previous MagicBlock program and `/chain`/`/devnet` clients remain diagnostic experiments. Their scripted devnet lifecycle and settlement were verified, but observed gameplay delay motivated the off-chain ranked architecture. See [the devnet history](docs/DEVNET-MILESTONE.md).
 
 - Maximum-level characters with balanced class/loadout presets.
-- A regional town lobby, practice duels and ranked 1v1 arenas.
+- Ranked 1v1 arenas; PvE will be built separately later.
 - Regional matchmaking by latency and rating.
 - Restricted session authorization for gameplay without a wallet prompt for every action.
-- Match rules executed in Solana programs on MagicBlock Ephemeral Rollups, with results settled back to Solana.
+- Server-authoritative results, with Solana ownership and economy outside the realtime loop.
 - Gold and equipment progression to be designed alongside competitive balance and abuse prevention.
 
 See [the implementation plan](docs/PVP-IMPLEMENTATION-PLAN.md). No performance, trustlessness or production-readiness claims are made for this initial repository.

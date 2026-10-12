@@ -287,3 +287,87 @@ dialog::backdrop {
 [hidden] {
   display: none !important;
 }
+#spellbook {
+  width: 100%;
+  margin: 8px 0 12px;
+  background: #10212b;
+  color: #eee3c7;
+  border: 1px solid #34515d;
+  border-radius: 8px;
+  padding: 10px;
+  font: inherit;
+}
+#spellbook-label {
+  display: block;
+}
+#potions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 16px;
+}
+#potions button {
+  padding: 10px 6px;
+  font-size: 12px;
+}
+dialog {
+  max-height: calc(100dvh - 40px);
+  overflow: auto;
+}
+@media (max-width: 800px) {
+  .loadout {
+    display: block;
+  }
+  .loadout .equipment {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+}
+@media (min-width: 1101px) {
+  .ranked-playing header {
+    height: 56px;
+    padding-top: 10px;
+    padding-bottom: 10px;
+  }
+  .ranked-playing main {
+    padding-top: 16px;
+    padding-bottom: 8px;
+  }
+  .ranked-playing .arena-layout {
+    height: calc(100dvh - 126px);
+    min-height: 340px;
+  }
+  .ranked-playing aside {
+    overflow: auto;
+  }
+  .ranked-playing #events {
+    height: auto;
+  }
+  .ranked-playing .battle {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+  }
+  .ranked-playing canvas {
+    width: min(100%, calc((100dvh - 250px) * 4 / 3));
+    height: auto;
+    margin: auto;
+  }
+  .ranked-playing .loadout h2 {
+    font-size: 20px;
+  }
+  .ranked-playing .inventory-label {
+    margin-top: 14px;
+  }
+  .ranked-playing .equipment div {
+    font-size: 12px;
+    padding: 8px;
+  }
+  .ranked-playing label {
+    margin-top: 10px;
+  }
+  .ranked-playing footer {
+    margin: 12px 0 0;
+  }
+}

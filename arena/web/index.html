@@ -86,10 +86,18 @@
             </div>
           </div>
           <p class="eyebrow inventory-label">SPELLS</p>
+          <label id="spellbook-label" hidden
+            >Spellbook
+            <select id="spellbook" aria-label="Choose a spell"></select
+          ></label>
           <button id="spell" aria-pressed="false">
             ✦ Arcane bolt <small>26 damage · 20 mana</small></button
           ><button id="cast" disabled>Cast selected spell</button>
           <p id="cast-help">Select a spell, then Cast, then the opponent.</p>
+          <div id="potions" hidden>
+            <button id="health-potion">Health potion · R</button
+            ><button id="mana-potion">Mana potion · B</button>
+          </div>
         </aside>
       </section>
       <footer>
